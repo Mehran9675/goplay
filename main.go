@@ -2,11 +2,8 @@
 package main
 
 import (
-	"bytes"
 	_ "embed"
 	"fmt"
-	"image"
-	_ "image/png"
 	"log"
 	"os"
 	"runtime/debug"
@@ -28,6 +25,11 @@ func main() {
 	var files, commands []string
 	for _, arg := range os.Args[1:] {
 		switch {
+		case strings.HasPrefix(arg, "--giode-action="):
+			// A file manager's "Play with GoPlay": Giode hands the
+			// paths after it to the app.
+			files = nil
+			goto parsed
 		case arg == "--version" || arg == "-v":
 			fmt.Println("goplay", app.Version)
 			return
@@ -47,13 +49,11 @@ func main() {
 			files = append(files, arg)
 		}
 	}
+parsed:
 
-	a, err := app.New(files, commands)
+	a, err := app.New(files, commands, iconPNG)
 	if err != nil {
 		fatal(err)
-	}
-	if img, _, err := image.Decode(bytes.NewReader(iconPNG)); err == nil {
-		a.SetIcon(img)
 	}
 	if err := a.Run(); err != nil {
 		fatal(err)

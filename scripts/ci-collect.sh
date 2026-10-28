@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Gathers what `giode build` left in dist/<platform> into out/, named with
+# the CPU so the x64 and ARM64 builds of one release don't collide:
+#   macOS    goplay-<version>-macos-<arch>.dmg
+#   Windows  goplay-<version>-windows-<arch>-setup.exe, and the program
+#            with its DLLs as goplay-<version>-windows-<arch>.zip
+#   Linux    the .deb and .rpm as built, and the program with its files as
+#            goplay-<version>-linux-<arch>.tar.gz
+# Usage: scripts/ci-collect.sh <macos|windows|linux> <arch>
+set -euo pipefail
+cd "$(dirname "$0")/.."
+platform="$1" arch="$2"
+version="$(sed -n 's/^version = "\(.*\)"/\1/p' giode.toml)"
+[ -n "${TAG:-}" ] || version="$version-dev"
+name="goplay-$version-$platform-$arch"
+rm -rf out
+mkdir -p out
+case "$platform" in
+macos)
+	cp dist/macos/*.dmg "out/$name.dmg"
+	;;
+windows)
+	cp dist/windows/*-setup.exe "out/$name-setup.exe"
+	mkdir -p "out/$name"
+	cp dist/windows/*.exe dist/windows/*.dll "out/$name/"
+	rm -f "out/$name/"*-setup.exe
+	(cd out && zip -qr "$name.zip" "$name" && rm -rf "$name")
+	;;
+linux)
+	cp dist/linux/*.deb dist/linux/*.rpm out/
+	mkdir -p "out/$name"
+	find dist/linux -mindepth 1 -maxdepth 1 ! -name '*.deb' ! -name '*.rpm' -exec cp -r {} "out/$name/" \;
+	tar -C out -czf "out/$name.tar.gz" "$name"
+	rm -rf "out/$name"
+	;;
+esac
+ls -l out

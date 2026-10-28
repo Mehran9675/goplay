@@ -2,3 +2,6 @@
 *.exe~
 *.dll
 /goplay
+/build/
+/dist/
+*.syso

@@ -17,7 +17,8 @@ Made for macOS first, and built for Windows and Linux too.
 - Resumes where you left off. Opening one episode queues the rest of the
   folder, in natural order (2 before 10).
 - Recent files on the start screen, with how far you got.
-- Drag and drop files, folders and subtitles; paste a link or path.
+- Drag and drop files, folders and subtitles (Windows for now), or paste a
+  link or path.
 
 **Controls**
 - In a window, the title bar and the controls sit above and below the
@@ -77,9 +78,18 @@ Advanced › Open Config Folder).
 
 ## Building
 
-You need Go 1.26+, a C compiler, pkg-config and libmpv's development files.
-`build.sh` and `build.bat` find the toolchain themselves and say exactly
-what's missing and how to install it.
+You need Go 1.26+, a C compiler, pkg-config, libmpv's development files and
+the [giode CLI](https://github.com/Mehran9675/giode-cli), which builds and
+packages goplay (`giode.toml`):
+
+```sh
+go install github.com/mehran9675/giode-cli/cmd/giode@latest
+```
+
+`build.sh` and `build.bat` find the toolchain themselves, say exactly what's
+missing and how to install it, then run `giode build` into `dist/`. With the
+toolchain set up, `giode run`, `giode build dmg`, `giode build
+windows-installer` and `giode build deb` work directly too.
 
 | | build | build and run |
 |---|---|---|
@@ -99,7 +109,8 @@ brew install go mpv pkg-config
 ```sh
 # Debian and Ubuntu (build.sh prints the dnf and pacman equivalents)
 sudo apt install build-essential pkg-config libmpv-dev zenity \
-  libx11-dev libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev
+  libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev \
+  libffi-dev libxcursor-dev libvulkan-dev
 ./build.sh
 ```
 
@@ -109,8 +120,9 @@ Install Go, MinGW-w64 (MSYS2: `pacman -S mingw-w64-x86_64-gcc
 mingw-w64-x86_64-pkgconf`) and the libmpv development package
 (`mpv-dev-x86_64-*.7z` from shinchiro/mpv-winbuild-cmake, extracted to
 `%USERPROFILE%\libmpv`). ANGLE comes from an installed VS Code, Chrome or Edge.
-`build.bat` makes `goplay.exe` and copies the DLLs it needs next to it;
-`run.bat` makes `goplay-debug.exe`, which shows mpv's log in the console.
+`build.bat` copies libmpv and ANGLE to `build\native`, where `giode.toml`
+bundles them from, and makes `dist\windows\goplay.exe` with them beside it;
+`run.bat` builds and runs it.
 
 To skip the search, set `LIBMPV` (all platforms), `MINGW` and `ANGLE`
 (Windows), or `CC` and `PKG_CONFIG` (macOS and Linux).
@@ -118,21 +130,21 @@ To skip the search, set `LIBMPV` (all platforms), `MINGW` and `ANGLE`
 Optional at runtime: **yt-dlp** for web pages, **FFmpeg** for casting files
 TVs can't play, and on Linux **zenity** for file dialogs.
 
-Publishing a release builds and tests it on macOS (Apple silicon), and on
-Linux and Windows for both x64 and ARM64, then attaches the packages to it
-(`.github/workflows/build.yml`, `scripts/package.sh`):
+Publishing a release builds and tests it with the giode CLI on macOS (Apple
+silicon), and on Linux and Windows for both x64 and ARM64, then attaches the
+packages to it (`.github/workflows/build.yml`):
 
 | | installer | portable |
 |---|---|---|
-| macOS | `.dmg` with goplay.app (libmpv inside) | `.zip` |
-| Windows | `-setup.exe`, per user or for everyone | `.zip`, every DLL next to `goplay.exe` |
-| Linux | `.deb`, using the system's libmpv | `.tar.gz` |
+| macOS | `.dmg` with goplay.app (libmpv inside) | |
+| Windows | `-setup.exe`, for the current user | `.zip`, libmpv and ANGLE next to `goplay.exe` |
+| Linux | `.deb` and `.rpm`, using the system's libmpv | `.tar.gz` |
 
-The installers add "Play with GoPlay" to the file manager's context menu:
-a Finder Quick Action on macOS, an Explorer entry on Windows (under "Show
-more options" on Windows 11), and a Dolphin and Nemo action on Linux. The
-project is set up for the Giode CLI (`giode.toml`), which can't yet bundle
-libmpv into app packages; see `docs/giode-gaps.md`.
+goplay opens video and audio files from the file manager's "Open with", and
+adds "Play with GoPlay" to its context menu: a Finder Quick Action on macOS
+(once goplay is in Applications and has run once), an Explorer entry from the
+Windows installer (under "Show more options" on Windows 11), and Dolphin,
+Nemo, GNOME Files and Caja entries on Linux, added when goplay first runs.
 
 ## How it works
 
@@ -142,11 +154,7 @@ internal/mpv/           cgo binding: client API (commands, observed properties,
                         events, wakeups) and the OpenGL render API
 internal/player/        the mpv core goplay drives: state, commands, filters,
                         3D and 360° projection, track names
-internal/platform/      the GLFW window: GL context per OS, input into Gio's
-                        router, clipboard, cursor, maximize/fullscreen on the
-                        right monitor, dragging and edge resizing, keep-awake,
-                        macOS window style and Finder open events
-internal/app/           the player itself: event loop and rendering, commands,
+internal/app/           the player itself: the window and its frames, commands,
                         opening media, 3D/VR, casting, and the views
 internal/actions/       the command registry: titles, shortcuts, the palette
 internal/settings/      the settings table, its mpv mapping and the JSON store
@@ -155,26 +163,22 @@ internal/cast/          Chromecast (mDNS, Cast v2) and DLNA (SSDP, UPnP
                         AVTransport), and the HTTP server feeding them
 ```
 
-**Rendering.** Video stays on the GPU: libmpv renders into the window's
-OpenGL framebuffer, then Gio draws the Giode interface over it in the same
-frame. On Windows the context is OpenGL ES through ANGLE, so hardware-decoded
-D3D11 frames are shared without copies; on macOS it's OpenGL, and on Linux
-OpenGL ES through EGL.
+**Rendering.** goplay is a `giode.App` with an underlay: each frame, libmpv
+renders the video into the window's OpenGL framebuffer, then Gio draws the
+Giode interface over it. Video stays on the GPU. On Windows the context is
+OpenGL ES through ANGLE, so hardware-decoded D3D11 frames are shared without
+copies; on macOS it's OpenGL, and on Linux OpenGL ES through EGL. The underlay
+needs Giode's patched Gio, which `giode build` and `giode run` build against;
+a plain `go build` compiles, but the window won't open.
 
-**Efficiency.** Nothing runs unless something changed. The loop sleeps until
-mpv has an event or a new frame (its wakeup and render callbacks), the user
-does something, or an animation needs its next frame. Playback state comes
-from mpv's observed properties, not polling. A paused or idle player uses no
-CPU, and during playback frames are drawn at the video's rate. Playing a
-1080p H.264 file on Windows uses about 1.7% of one CPU core, against 8% for
-the previous version, which redrew continuously. Memory is about the same
-(roughly 120 MB private while playing, 65 MB idle), nearly all of it mpv,
+**Efficiency.** Nothing runs unless something changed. A frame is drawn
+when mpv has a new picture (its render callback), its events change what's
+shown (its wakeup callback), the user does something, or a timer or animation
+is due. Playback state comes from mpv's observed properties, not polling. A
+paused or idle player uses no CPU, and during playback frames are drawn at
+the video's rate. Playing a 1080p H.264 file on Windows uses about 2.7% of one
+CPU core and 127 MB of private memory (70 MB idle), nearly all of it mpv,
 FFmpeg and the graphics driver.
-
-**Giode without `giode.App`.** Giode's `App` can't put video under its UI
-yet (see `docs/giode-gaps.md`), so goplay hosts Giode's components in its own
-GLFW window, as Giode's docs describe for embedded windows. It imports the
-component packages directly, so Gio's own windowing layer isn't linked.
 
 ## Testing
 

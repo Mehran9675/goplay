@@ -46,7 +46,8 @@ func newVideoArea(u *ui) *videoArea {
 		Styles(styles.Styles{Width: -1, Height: -1, Cursor: properties.CursorDefault}).
 		OnClick(func(e elements.ClickEvent) {
 			st := &a.player.State
-			if st.Idle || a.vrActive() || u.modalOpen() {
+			// OnClick sees every button; the right one opens the menu.
+			if e.Button != elements.MousePrimary || st.Idle || a.vrActive() || u.modalOpen() {
 				return
 			}
 			switch e.Clicks {
@@ -60,7 +61,7 @@ func newVideoArea(u *ui) *videoArea {
 					a.togglePause()
 					u.flash = ""
 				}
-				a.setFullscreen(!a.win.Fullscreen())
+				a.setFullscreen(!a.g.Fullscreen())
 			}
 		}).
 		OnSecondaryClick(func(e elements.ClickEvent) {

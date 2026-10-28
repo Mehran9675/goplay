@@ -93,10 +93,10 @@ func (a *App) registerCommands() {
 		when(act("sub_next_line", "Next Subtitle Line", "Subtitles", k("Mod+Shift+Right"), func() { p.SubStep(1) }), hasMedia),
 
 		// Video
-		toggle(act("fullscreen", "Fullscreen", "Video", k("F", "F11"), func() { a.setFullscreen(!a.win.Fullscreen()) }), a.win.Fullscreen),
-		toggle(act("maximize", "Maximize", "Video", nil, func() { windowCtl{a}.ToggleMaximize() }), a.win.Maximized),
+		toggle(act("fullscreen", "Fullscreen", "Video", k("F", "F11"), func() { a.setFullscreen(!a.g.Fullscreen()) }), a.g.Fullscreen),
+		toggle(act("maximize", "Maximize", "Video", nil, func() { windowCtl{a}.ToggleMaximize() }), a.g.Maximized),
 		toggle(act("pip", "Picture in Picture", "Video", k("P"), a.togglePiP), func() bool { return a.ui.pip }),
-		toggle(act("always_on_top", "Always on Top", "Video", k("T"), a.toggleOnTop), a.win.Floating),
+		toggle(act("always_on_top", "Always on Top", "Video", k("T"), a.toggleOnTop), func() bool { return a.onTop }),
 		when(act("screenshot", "Take Screenshot", "Video", k("S"), func() { a.screenshot("subtitles") }), hasMedia),
 		when(act("screenshot_clean", "Take Screenshot Without Subtitles", "Video", k("Shift+S"), func() { a.screenshot("video") }), hasMedia),
 		when(act("rotate", "Rotate 90°", "Video", k("Mod+R"), a.rotate), hasMedia),
@@ -411,7 +411,7 @@ func (a *App) toggleSetting(key, label string) {
 }
 
 func (a *App) toggleOnTop() {
-	on := !a.win.Floating()
-	a.win.SetFloating(on)
+	on := !a.onTop
+	a.setOnTop(on)
 	a.osd(onOff("Always on top", on))
 }

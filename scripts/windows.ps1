@@ -2,8 +2,8 @@
 #
 # Called by build.bat and run.bat; not meant to be run directly. It finds
 # the MinGW-w64 compiler, pkg-config, libmpv and the ANGLE DLLs, stops with
-# an error naming whatever is missing, then builds goplay and copies the
-# runtime DLLs next to the exe.
+# an error naming whatever is missing, then builds goplay with the giode
+# CLI into dist\windows, with libmpv and ANGLE next to the exe.
 #
 # Detection order for each dependency: an environment variable override
 # (MINGW, LIBMPV, ANGLE), then PATH, then a search of the usual install
@@ -228,51 +228,36 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-if ($Mode -eq 'build') {
-    # GUI subsystem: no console window.
-    $exe = 'goplay.exe'
-    $ldflags = '-H=windowsgui'
-}
-else {
-    # Console subsystem so mpv and Go logs show in the terminal.
-    $exe = 'goplay-debug.exe'
-    $ldflags = ''
+$giode = Get-Command giode -ErrorAction SilentlyContinue
+if (-not $giode) {
+    Write-Host 'ERROR: the giode CLI is not installed. Install it with:' -ForegroundColor Red
+    Write-Host '  go install github.com/mehran9675/giode-cli/cmd/giode@latest' -ForegroundColor Red
+    exit 1
 }
 
-Step "Building $exe"
+# giode.toml's [native.windows] bundles libmpv and ANGLE from build\native.
+Step 'Staging libmpv and ANGLE in build\native'
+$native = Join-Path $root 'build\native'
+New-Item -ItemType Directory -Force $native | Out-Null
+foreach ($d in @($mpvDll, "$angle\libEGL.dll", "$angle\libGLESv2.dll")) {
+    Copy-Item -Force $d $native
+}
+
 Push-Location $root
 try {
-    # Windows PowerShell drops empty arguments, so -ldflags is only passed
-    # when set.
-    $version = (& git -C $root describe --tags --always --dirty 2>$null)
-    if ($version) { $ldflags = "$ldflags -X github.com/mehran9675/goplay/internal/app.Version=$version".Trim() }
-    $buildArgs = @('build')
-    if ($ldflags) { $buildArgs += @('-ldflags', $ldflags) }
-    & go @buildArgs -o $exe .
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host 'ERROR: go build failed.' -ForegroundColor Red
-        exit 1
-    }
-
-    # The app folder is searched for DLLs before PATH, so copying them
-    # next to the exe makes it self-contained.
-    Step 'Copying runtime DLLs'
-    $dlls = @($mpvDll, "$angle\libEGL.dll", "$angle\libGLESv2.dll") + ($runtimeDlls | ForEach-Object { "$mingw\$_" })
-    foreach ($d in $dlls) {
-        $dest = Join-Path $root (Split-Path -Leaf $d)
-        if ((Test-Path $dest) -and (Get-FileHash $d).Hash -eq (Get-FileHash $dest).Hash) { continue }
-        try { Copy-Item -Force $d $root }
-        catch { Write-Host "    warning: could not copy $(Split-Path -Leaf $d) (is goplay running?)" -ForegroundColor Yellow }
-    }
-
     if ($Mode -eq 'build') {
+        Step 'Building with giode (dist\windows)'
+        & giode build windows
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host 'ERROR: giode build failed.' -ForegroundColor Red
+            exit 1
+        }
         Write-Host ''
-        Write-Host "Build complete: $root\$exe" -ForegroundColor Green
+        Write-Host "Build complete: $root\dist\windows\goplay.exe" -ForegroundColor Green
         exit 0
     }
-
-    Step "Running $exe $AppArgs"
-    & ".\$exe" @AppArgs
+    Step "Building and running goplay $AppArgs"
+    & giode run windows @AppArgs
     exit $LASTEXITCODE
 }
 finally {
