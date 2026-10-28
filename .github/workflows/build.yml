@@ -119,6 +119,9 @@ jobs:
         shell: msys2 {0}
     env:
       CGO_ENABLED: "1"
+      # The toolchain's compiler (gcc in UCRT64, clang in CLANGARM64), not
+      # another one on the inherited PATH.
+      CC: cc
     steps:
       - uses: actions/checkout@v4
         with:
@@ -149,7 +152,7 @@ jobs:
           # Edge, whose DLLs need nothing else. See giode.toml's
           # [native.windows].
           set -x
-          env_file="$(cygpath -u "$GITHUB_ENV")" path_file="$(cygpath -u "$GITHUB_PATH")"
+          path_file="$(cygpath -u "$GITHUB_PATH")"
           mkdir -p build/native build/libmpv
           tmp="$(cygpath -u "$RUNNER_TEMP")"
           gh release download -R shinchiro/mpv-winbuild-cmake -p "mpv-dev-${{ matrix.mpv }}-[0-9]*.7z" -D "$tmp"
@@ -159,7 +162,9 @@ jobs:
           cp build/libmpv/libmpv-2.dll build/native/
           prefix="$(cygpath -m "$PWD/build/libmpv")"
           printf 'prefix=%s\nlibdir=${prefix}\nincludedir=${prefix}/include\n\nName: mpv\nDescription: libmpv\nVersion: 0.40.0\nLibs: -L${libdir} -lmpv\nCflags: -I${includedir}\n' "$prefix" > build/libmpv/mpv.pc
-          echo "PKG_CONFIG_PATH=$prefix" >> "$env_file"
+          # MSYS2's login profile sets PKG_CONFIG_PATH; the toolchain's own
+          # pkgconfig folder is always searched.
+          cp build/libmpv/mpv.pc "$MINGW_PREFIX/lib/pkgconfig/"
           angle=""
           for f in "/c/Program Files (x86)/Microsoft/Edge/Application"/*/libEGL.dll "/c/Program Files/Microsoft/Edge/Application"/*/libEGL.dll; do
             if [ -f "$f" ]; then angle="$f"; break; fi
