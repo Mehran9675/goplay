@@ -32,8 +32,12 @@ after that fails with `native libraries: libmpv-2.dll: EOF`. A stale DLL in
 
 **Fix:** leave the output folder out of the search for the app itself
 (looking beside a bundled DLL for its own imports is fine), skip copying a
-file onto itself, or empty `dist/<platform>` before building. CI always
-builds into a clean folder, so only local rebuilds hit this.
+file onto itself, or empty `dist/<platform>` before building.
+
+**This blocks goplay's Windows packages.** CI builds into a clean folder,
+but `giode build windows windows-installer` collects the DLLs into
+`dist/windows` once per target, so the installer target finds the `windows`
+target's copies and fails the same way.
 
 ### 2. VS Code's ANGLE isn't found
 
