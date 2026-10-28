@@ -1,81 +1,167 @@
 package ui
 
 import (
-	"fmt"
-	"image"
-	"os"
+	"strconv"
 
-	"gioui.org/layout"
-	"gioui.org/op"
-	"gioui.org/op/clip"
-	"gioui.org/op/paint"
-	"gioui.org/widget"
-	"gioui.org/widget/material"
+	"github.com/mehran9675/giode"
+	"github.com/mehran9675/giode/components/icon"
+	"github.com/mehran9675/giode/components/menu"
 )
 
-// menuLayout draws the right-click context menu at the cursor plus a
-// full-window dismissal area underneath it: any click closes the menu, and
-// menu item clicks reach the items because both handlers receive the events.
-func (u *UI) menuLayout(gtx layout.Context, c Controller) layout.Dimensions {
-	if !u.menuOpen {
-		return layout.Dimensions{}
+// Choices offered by the Video > Aspect Ratio and Playback > Speed
+// submenus. An empty ratio means the file's own.
+var (
+	aspectRatios = []struct{ label, ratio string }{
+		{"Auto", ""}, {"16:9", "16:9"}, {"4:3", "4:3"}, {"21:9", "2.33:1"}, {"1:1", "1:1"},
 	}
-	fmt.Fprintln(os.Stderr, "DBG menuLayout: menu open")
-	for u.menuDismiss.Clicked(gtx) {
-		u.menuOpen = false
-		fmt.Fprintln(os.Stderr, "DBG menuDismiss CLICKED -> close")
-	}
-	u.menuDismiss.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Dimensions{Size: gtx.Constraints.Max}
-	})
+	speeds = []float64{0.5, 0.75, 1, 1.25, 1.5, 2}
+)
 
-	// The panel is positioned at the cursor (converted from dp to px).
-	off := op.Offset(image.Pt(int(u.menuPos.X*gtx.Metric.PxPerDp), int(u.menuPos.Y*gtx.Metric.PxPerDp))).Push(gtx.Ops)
-	macro := op.Record(gtx.Ops)
-	dims := u.menuItems(gtx, c)
-	call := macro.Stop()
-u.menuRect = image.Rectangle{
-		Min: image.Pt(int(u.menuPos.X), int(u.menuPos.Y)),
-		Max: image.Pt(int(u.menuPos.X)+int(gtx.Metric.PxToDp(dims.Size.X)), int(u.menuPos.Y)+int(gtx.Metric.PxToDp(dims.Size.Y))),
-	}
-	fmt.Fprintf(os.Stderr, "DBG menuRect %v dims %v pos %v scale %v\n", u.menuRect, dims.Size, u.menuPos, gtx.Metric.PxPerDp)
-	paint.FillShape(gtx.Ops, rgba(0x2e2e2e, 0xf2), clip.UniformRRect(image.Rectangle{Max: dims.Size}, gtx.Dp(8)).Op(gtx.Ops))
-	call.Add(gtx.Ops)
-	off.Pop()
-	return layout.Dimensions{Size: gtx.Constraints.Max}
+// noIcon fills the icon column of unchecked rows so their labels line up
+// with checked ones.
+var noIcon = icon.Path{Data: "M0 0"}
+
+// newMenu returns a menu (or submenu) in the player's style: a dark,
+// raised panel with a soft drop shadow instead of a border.
+func newMenu() *menu.Menu {
+	return giode.Menu(giode.Styles{
+		Background:   menuBg,
+		Color:        menuFg,
+		BorderRadius: 8,
+		Padding:      giode.UniformInset(6),
+		BoxShadow:    giode.BoxShadow{Y: 8, Blur: 24, Color: "#000000d9"},
+	}).
+		ItemPadding(giode.SymmetricInset(18, 9)).
+		HoverColor(menuHover).
+		SeparatorColor(menuSeparator).
+		DisabledColor(menuDisabled)
 }
 
-func (u *UI) menuItems(gtx layout.Context, c Controller) layout.Dimensions {
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return u.menuItem(gtx, &u.menuOpenFile, u.icons.openFile, "Open File", func() {
-				c.OpenFile()
-				u.menuOpen = false
-			})
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return u.menuItem(gtx, &u.menuOpenFolder, u.icons.openFolder, "Open Folder", func() {
-				c.OpenFolder()
-				u.menuOpen = false
-			})
-		}),
-	)
+// checkItem appends a row showing a checkmark when on. Checkmarks are
+// the menu's only icons: they mark the current track or setting.
+func checkItem(m *menu.Menu, label string, on bool, action func()) {
+	var ic icon.Source = noIcon
+	if on {
+		ic = iconSrc("check")
+	}
+	m.IconItem(ic, label, action)
 }
 
-func (u *UI) menuItem(gtx layout.Context, btn *widget.Clickable, icon *widget.Icon, label string, onClick func()) layout.Dimensions {
-	for btn.Clicked(gtx) {
-		fmt.Fprintf(os.Stderr, "DBG menu item %q CLICKED\n", label)
-		onClick()
+// buildMenu creates the right-click context menu. Entries that depend on
+// the current state (tracks, fullscreen, settings) are chosen here, so
+// OpenMenuAt rebuilds the menu every time it opens.
+func (u *UI) buildMenu() *menu.Menu {
+	m := newMenu().
+		Item("Open File…", func() { u.act(Controller.OpenFile) }).
+		Item("Open Folder…", func() { u.act(Controller.OpenFolder) }).
+		Separator().
+		SubMenu("Subtitles", u.subtitleMenu()).
+		SubMenu("Video", u.videoMenu()).
+		SubMenu("Audio", u.audioMenu()).
+		SubMenu("Playback", u.playbackMenu()).
+		Separator().
+		Item("Settings…", u.OpenSettings).
+		Separator()
+	if u.Fullscreen {
+		m.Item("Exit Fullscreen", func() { u.act(Controller.ToggleFullscreen) })
+	} else {
+		m.Item("Fullscreen", func() { u.act(Controller.ToggleFullscreen) })
 	}
-	return material.Clickable(gtx, btn, func(gtx layout.Context) layout.Dimensions {
-		return layout.Inset{Top: 8, Bottom: 8, Left: 12, Right: 28}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return u.icon(gtx, icon, 18)
-				}),
-				layout.Rigid(layout.Spacer{Width: 10}.Layout),
-				layout.Rigid(material.Label(u.th, u.th.TextSize, label).Layout),
-			)
+	return m.Separator().
+		Item("Quit", func() { u.act(Controller.Quit) })
+}
+
+// tracks lists the current tracks of kind, or none before a controller
+// is attached.
+func (u *UI) tracks(kind TrackKind) []Track {
+	if u.c == nil {
+		return nil
+	}
+	return u.c.Tracks(kind)
+}
+
+// trackItems appends one checkable row per track of kind, or a disabled
+// placeholder when there are none.
+func (u *UI) trackItems(m *menu.Menu, kind TrackKind, none string) {
+	tracks := u.tracks(kind)
+	if len(tracks) == 0 {
+		m.DisabledItem(none)
+		return
+	}
+	for _, t := range tracks {
+		id := t.ID
+		checkItem(m, t.Title, t.Selected, func() {
+			u.act(func(c Controller) { c.SelectTrack(kind, id) })
 		})
+	}
+}
+
+func (u *UI) subtitleMenu() *menu.Menu {
+	m := newMenu().
+		IconItem(noIcon, "Load Subtitle File…", func() { u.act(Controller.LoadSubtitle) }).
+		Separator()
+	tracks := u.tracks(TrackSubtitle)
+	off := true
+	for _, t := range tracks {
+		off = off && !t.Selected
+	}
+	checkItem(m, "Off", off, func() {
+		u.act(func(c Controller) { c.SelectTrack(TrackSubtitle, 0) })
 	})
+	for _, t := range tracks {
+		id := t.ID
+		checkItem(m, t.Title, t.Selected, func() {
+			u.act(func(c Controller) { c.SelectTrack(TrackSubtitle, id) })
+		})
+	}
+	return m
+}
+
+func (u *UI) videoMenu() *menu.Menu {
+	m := newMenu()
+	u.trackItems(m, TrackVideo, "No video tracks")
+	aspect := newMenu()
+	current := ""
+	if u.c != nil {
+		current = u.c.AspectRatio()
+	}
+	for _, a := range aspectRatios {
+		ratio := a.ratio
+		checkItem(aspect, a.label, ratio == current, func() {
+			u.act(func(c Controller) { c.SetAspectRatio(ratio) })
+		})
+	}
+	m.Separator()
+	// Line up with the track rows' checkmark column; with no tracks the
+	// placeholder above has none.
+	if len(u.tracks(TrackVideo)) == 0 {
+		return m.SubMenu("Aspect Ratio", aspect)
+	}
+	return m.IconSubMenu(noIcon, "Aspect Ratio", aspect)
+}
+
+func (u *UI) audioMenu() *menu.Menu {
+	m := newMenu()
+	u.trackItems(m, TrackAudio, "No audio tracks")
+	return m
+}
+
+func (u *UI) playbackMenu() *menu.Menu {
+	speed, loop := 1.0, false
+	if u.c != nil {
+		speed, loop = u.c.Speed(), u.c.Loop()
+	}
+	speedMenu := newMenu()
+	for _, s := range speeds {
+		label := strconv.FormatFloat(s, 'f', -1, 64) + "×"
+		if s == 1 {
+			label = "Normal"
+		}
+		checkItem(speedMenu, label, s == speed, func() {
+			u.act(func(c Controller) { c.SetSpeed(s) })
+		})
+	}
+	m := newMenu().IconSubMenu(noIcon, "Speed", speedMenu)
+	checkItem(m, "Loop", loop, func() { u.act(Controller.ToggleLoop) })
+	return m
 }

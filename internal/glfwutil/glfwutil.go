@@ -1,37 +1,12 @@
-// Package glfwutil exposes a few GLFW functions that cimgui-go's glfwbackend
-// does not wrap: fullscreen toggling and monitor work-area queries. The GLFW
-// symbols are statically linked by glfwbackend, so they are only referenced
-// here (no extra -l flags needed).
+// Package glfwutil exposes a few GLFW helpers: monitor selection for
+// fullscreen and work-area queries (on top of the go-gl/glfw bindings), and
+// cursor/mouse polling through the current context.
 package glfwutil
 
 /*
 extern void* glfwGetCurrentContext(void);
-extern void* glfwGetPrimaryMonitor(void);
-extern void glfwGetMonitorWorkarea(void* monitor, int* xpos, int* ypos, int* width, int* height);
-extern void glfwSetWindowPos(void* window, int xpos, int ypos);
-extern void glfwSetWindowSize(void* window, int width, int height);
 extern void glfwGetCursorPos(void* window, double* xpos, double* ypos);
 extern int  glfwGetMouseButton(void* window, int button);
-
-static void goplay_get_workarea(int* x, int* y, int* w, int* h) {
-	glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), x, y, w, h);
-}
-
-// Borderless fullscreen: resize/position the window over the monitor's work
-// area instead of attaching it to the monitor. Attaching (glfwSetWindowMonitor)
-// switches the display mode, which makes the monitor flicker/black out.
-static void goplay_set_fullscreen(int on, int x, int y, int w, int h) {
-	void* win = glfwGetCurrentContext();
-	if (on) {
-		int mx = 0, my = 0, mw = 0, mh = 0;
-		glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), &mx, &my, &mw, &mh);
-		glfwSetWindowPos(win, mx, my);
-		glfwSetWindowSize(win, mw, mh);
-	} else {
-		glfwSetWindowPos(win, x, y);
-		glfwSetWindowSize(win, w, h);
-	}
-}
 
 static void goplay_get_cursor_pos(double* x, double* y) {
 	glfwGetCursorPos(glfwGetCurrentContext(), x, y);
@@ -43,23 +18,62 @@ static int goplay_mouse_down(int button) {
 */
 import "C"
 
-// WorkArea returns the primary monitor's work area in screen coordinates.
-func WorkArea() (x, y, w, h int) {
-	var cx, cy, cw, ch C.int
-	C.goplay_get_workarea(&cx, &cy, &cw, &ch)
-	return int(cx), int(cy), int(cw), int(ch)
+import (
+	"image"
+
+	"github.com/go-gl/glfw/v3.3/glfw"
+)
+
+// MonitorOf returns the monitor showing most of win, falling back to the
+// primary monitor when the window is off-screen.
+func MonitorOf(win *glfw.Window) *glfw.Monitor {
+	wx, wy := win.GetPos()
+	ww, wh := win.GetSize()
+	r := image.Rect(wx, wy, wx+ww, wy+wh)
+	best, bestArea := glfw.GetPrimaryMonitor(), 0
+	for _, m := range glfw.GetMonitors() {
+		ov := r.Intersect(monitorBounds(m))
+		if a := ov.Dx() * ov.Dy(); a > bestArea {
+			best, bestArea = m, a
+		}
+	}
+	return best
 }
 
-// SetFullscreen switches the current window between borderless fullscreen and
-// windowed mode. x/y/w/h are the windowed-mode restore position and size (only
-// used when leaving fullscreen). The display mode is never changed, so the
-// monitor does not flicker.
-func SetFullscreen(on bool, x, y, w, h int) {
-	onI := 0
-	if on {
-		onI = 1
+// monitorBounds is m's full area in screen coordinates.
+func monitorBounds(m *glfw.Monitor) image.Rectangle {
+	x, y := m.GetPos()
+	mode := m.GetVideoMode()
+	if mode == nil {
+		return image.Rectangle{}
 	}
-	C.goplay_set_fullscreen(C.int(onI), C.int(x), C.int(y), C.int(w), C.int(h))
+	return image.Rect(x, y, x+mode.Width, y+mode.Height)
+}
+
+// WorkArea returns the work area (the monitor minus taskbars and docks) of
+// the monitor showing win, in screen coordinates.
+func WorkArea(win *glfw.Window) (x, y, w, h int) {
+	return MonitorOf(win).GetWorkarea()
+}
+
+// SetFullscreen switches win between borderless fullscreen and windowed
+// mode. Fullscreen covers the whole monitor the window is on. x/y/w/h are
+// the windowed-mode restore position and size (only used when leaving
+// fullscreen). The window is resized rather than attached to the monitor
+// (SetMonitor), which would switch the display mode and make the monitor
+// flicker/black out.
+func SetFullscreen(win *glfw.Window, on bool, x, y, w, h int) {
+	if on {
+		b := monitorBounds(MonitorOf(win))
+		if b.Empty() {
+			return
+		}
+		win.SetPos(b.Min.X, b.Min.Y)
+		win.SetSize(b.Dx(), b.Dy())
+		return
+	}
+	win.SetPos(x, y)
+	win.SetSize(w, h)
 }
 
 // GLFW mouse button ids.

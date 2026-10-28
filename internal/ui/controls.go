@@ -1,111 +1,136 @@
 package ui
 
 import (
-	"image"
+	"github.com/mehran9675/giode"
+	"github.com/mehran9675/giode/styles/properties"
 
-	"gioui.org/layout"
-	"gioui.org/op/clip"
-	"gioui.org/op/paint"
-	"gioui.org/unit"
-	"gioui.org/widget/material"
+	"github.com/mehran9675/goplay-ebiten/internal/settings"
 )
 
-// controlsLayout positions the control bar at the bottom of the window.
-func (u *UI) controlsLayout(gtx layout.Context, c Controller) layout.Dimensions {
-	win := gtx.Constraints.Max
-	barH := gtx.Dp(controlH)
-	winDp := image.Pt(int(gtx.Metric.PxToDp(win.X)), int(gtx.Metric.PxToDp(win.Y)))
-	u.controlRect = image.Rectangle{
-		Min: image.Pt(0, winDp.Y-controlH),
-		Max: winDp,
+// Button and icon sizes in dp. Buttons are given an explicit square size
+// so the icon inside never gets a non-square box (which would stretch the
+// round play button into a pill).
+const (
+	btnSize      = 40
+	btnIcon      = 22
+	playSize     = 44
+	playIcon     = 26
+	volumeWidth  = 96
+	timeFontSize = 13
+)
+
+// bar is the control bar pinned to the bottom of the window: the seek
+// row on top, then the transport buttons. Outside fullscreen it has its
+// own strip below the video and a solid background; in fullscreen it
+// overlays the video, fading from transparent into a dark scrim.
+func (u *UI) bar(c Controller) giode.Element {
+	st := giode.Styles{
+		Width:         -1,
+		Height:        properties.Height(controlH),
+		Background:    barColor,
+		FlexDirection: giode.FlexDirectionColumn,
+		Justify:       giode.JustifyCenter,
+		Padding:       giode.SymmetricInset(16, 6),
+		Gap:           2,
 	}
-	return layout.Stack{Alignment: layout.S}.Layout(gtx,
-		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-			gtx.Constraints = layout.Exact(image.Pt(win.X, barH))
-			return u.drawControls(gtx, c)
-		}),
+	if u.Fullscreen {
+		st.Background = ""
+		st.BackgroundGradient = giode.Linear(180, "#0b0e1400", "#0b0e14b3", "#0b0e14eb")
+		st.Justify = giode.JustifyEnd
+		st.Padding = giode.Inset{Right: 16, Bottom: 10, Left: 16}
+	}
+	return giode.Box(st, u.seekRow(c), u.transportRow(c))
+}
+
+// seekRow draws elapsed time, the progress slider and the duration.
+// Clicking or dragging the slider seeks. While the user drags, the slider
+// keeps the dragged value (see syncSliders); otherwise it tracks
+// c.Pos()/c.Duration(). The right-hand label shows the duration, or the
+// time remaining when that setting is on.
+func (u *UI) seekRow(c Controller) giode.Element {
+	pos, dur := "--:--", "--:--"
+	if c.Duration() > 0 {
+		pos, dur = formatTime(c.Pos()), formatTime(c.Duration())
+		if c.Settings().Bool(settings.KeyRemainingTime) {
+			dur = "-" + formatTime(c.Duration()-c.Pos())
+		}
+	}
+	return giode.Box(giode.Styles{
+		Width:  -1,
+		Height: 24,
+		Align:  giode.AlignCenter,
+		Gap:    12,
+		Wrap:   giode.WrapNoWrap,
+	},
+		timeLabel(pos),
+		giode.Box(giode.Styles{Width: -1}, u.seek),
+		timeLabel(dur),
 	)
 }
 
-// drawControls draws the translucent bar and its rows: the seek slider on
-// top, then the transport buttons and the right-aligned volume/fullscreen
-// group.
-func (u *UI) drawControls(gtx layout.Context, c Controller) layout.Dimensions {
-	paint.FillShape(gtx.Ops, rgba(0x0b0e14, 0xcc), clip.Rect{Max: gtx.Constraints.Max}.Op())
-	return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return u.seekRow(gtx, c)
-			}),
-			layout.Rigid(layout.Spacer{Height: unit.Dp(2)}.Layout),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return u.transportRow(gtx, c)
-			}),
-		)
-	})
+// transportRow holds the playback controls and volume on the left and
+// the settings and fullscreen controls on the right.
+func (u *UI) transportRow(c Controller) giode.Element {
+	return giode.Box(giode.Styles{
+		Width: -1,
+		Align: giode.AlignCenter,
+		Gap:   4,
+		// The row must not wrap: wrapping measures the expanding
+		// spacer at the full available width, pushing the right-hand
+		// controls onto a clipped second line.
+		Wrap: giode.WrapNoWrap,
+	},
+		u.playBtn,
+		u.stopBtn,
+		u.nextBtn,
+		u.muteBtn,
+		giode.Box(giode.Styles{
+			Width:  properties.Width(volumeWidth),
+			Height: 24,
+			Align:  giode.AlignCenter,
+		}, u.vol),
+		// Spacer: pushes the settings and fullscreen controls right.
+		giode.Box(giode.Styles{Width: -1}),
+		u.settingsBtn,
+		u.fullscreenBtn,
+	)
 }
 
-// transportRow is the row of transport buttons, time label, volume and
-// fullscreen controls.
-func (u *UI) transportRow(gtx layout.Context, c Controller) layout.Dimensions {
-	sp := func(w unit.Dp) layout.FlexChild {
-		return layout.Rigid(layout.Spacer{Width: w}.Layout)
+// updateIcons refreshes the icons that depend on playback, volume and
+// fullscreen state. Icons are stateless, so they are rebuilt every frame.
+func (u *UI) updateIcons(c Controller) {
+	play := "play"
+	if c.HasMedia() && !c.Paused() && !c.Finished() {
+		play = "pause"
 	}
-	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return u.iconButton(gtx, &u.openBtn, u.icons.openFile, "Open file (O)", false, c.OpenFile)
-		}),
-		sp(2),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return u.iconButton(gtx, &u.folderBtn, u.icons.openFolder, "Open folder (D)", false, c.OpenFolder)
-		}),
-		sp(4),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			playing := c.HasMedia() && !c.Paused() && !c.Finished()
-			icon := u.icons.play
-			tip := "Play (Space)"
-			if playing {
-				icon = u.icons.pause
-				tip = "Pause (Space)"
-			}
-			return u.iconButton(gtx, &u.playBtn, icon, tip, true, c.TogglePause)
-		}),
-		sp(2),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return u.iconButton(gtx, &u.stopBtn, u.icons.stop, "Stop (S)", false, c.Stop)
-		}),
-		sp(2),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return u.iconButton(gtx, &u.nextBtn, u.icons.next, "Next (N)", false, c.Next)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Inset{Left: 8, Right: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return material.Label(u.th, u.th.TextSize, formatTime(c.Pos())+" / "+formatTime(c.Duration())).Layout(gtx)
-			})
-		}),
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return layout.Spacer{}.Layout(gtx)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			vol := c.Volume()
-			icon := u.icons.volumeOff
-			if vol > 0.5 {
-				icon = u.icons.volumeUp
-			}
-			return u.icon(gtx, icon, 20)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return u.volumeSlider(gtx, c)
-		}),
-		sp(4),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			icon := u.icons.fullscreen
-			tip := "Fullscreen (F)"
-			if c.Fullscreen() {
-				icon = u.icons.fullscreenOut
-				tip = "Exit fullscreen (F)"
-			}
-			return u.iconButton(gtx, &u.fullscreenBtn, icon, tip, false, c.ToggleFullscreen)
-		}),
-	)
+	fullscreen := "fullscreen"
+	if c.Fullscreen() {
+		fullscreen = "fullscreen-exit"
+	}
+
+	u.playBtn.Icon(glyph(play, playIcon, onHighlight))
+	u.stopBtn.Icon(glyph("stop", btnIcon, iconColor))
+	u.nextBtn.Icon(glyph("skip-next", btnIcon, iconColor))
+	u.muteBtn.Icon(glyph(volumeIcon(c.Volume()), btnIcon, iconColor))
+	u.settingsBtn.Icon(glyph("settings", btnIcon, iconColor))
+	u.fullscreenBtn.Icon(glyph(fullscreen, btnIcon, iconColor))
+}
+
+// volumeIcon picks the speaker glyph for volume v in [0, 1].
+func volumeIcon(v float64) string {
+	switch {
+	case v <= 0:
+		return "volume-off"
+	case v < 0.5:
+		return "volume-down"
+	default:
+		return "volume-up"
+	}
+}
+
+// timeLabel is a fixed-width time readout, so the seek bar does not
+// shift as the digits change.
+func timeLabel(s string) giode.Element {
+	return giode.Box(giode.Styles{MinWidth: 44, Justify: giode.JustifyCenter},
+		giode.Text(s, giode.Styles{Color: fgColor, FontSize: timeFontSize, FontWeight: giode.FontWeightMedium}))
 }

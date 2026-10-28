@@ -127,6 +127,30 @@ func (m *Handle) GetDouble(name string) (v float64, ok bool) {
 	return float64(cv), true
 }
 
+// GetString reads a property as a string. ok is false if it is
+// unavailable.
+func (m *Handle) GetString(name string) (v string, ok bool) {
+	cname := C.CString(name)
+	defer C.free(unsafe.Pointer(cname))
+	cv := C.mpv_get_property_string(m.h, cname)
+	if cv == nil {
+		return "", false
+	}
+	defer C.mpv_free(unsafe.Pointer(cv))
+	return C.GoString(cv), true
+}
+
+// GetInt reads an integer property. ok is false if it is unavailable.
+func (m *Handle) GetInt(name string) (v int64, ok bool) {
+	cname := C.CString(name)
+	defer C.free(unsafe.Pointer(cname))
+	var cv C.int64_t
+	if e := C.mpv_get_property(m.h, cname, C.MPV_FORMAT_INT64, unsafe.Pointer(&cv)); e < 0 {
+		return 0, false
+	}
+	return int64(cv), true
+}
+
 // RequestLog enables mpv log messages at level ("fatal".."trace").
 func (m *Handle) RequestLog(level string) error {
 	c := C.CString(level)

@@ -1,44 +1,44 @@
 package ui
 
 import (
-	"golang.org/x/exp/shiny/materialdesign/icons"
+	"embed"
+	"fmt"
 
-	"gioui.org/widget"
+	"github.com/mehran9675/giode"
+	"github.com/mehran9675/giode/components/icon"
+	"github.com/mehran9675/giode/styles/properties"
 )
 
-// iconSet holds the Material Design icons used by the control bar and menu.
-// widget.Icon rasterizes IconVG directly, so no icon font is needed.
-type iconSet struct {
-	play          *widget.Icon
-	pause         *widget.Icon
-	stop          *widget.Icon
-	next          *widget.Icon
-	openFile      *widget.Icon
-	openFolder    *widget.Icon
-	volumeUp      *widget.Icon
-	volumeOff     *widget.Icon
-	fullscreen    *widget.Icon
-	fullscreenOut *widget.Icon
-}
+// Giode ships no icon set, so the player embeds the icons it uses. They
+// are Material Design glyphs (Apache 2.0) on a 24x24 viewBox, registered
+// by file name: "icons/skip-next.svg" becomes "skip-next".
+//
+//go:embed icons/*.svg
+var iconFiles embed.FS
 
-func newIcons() iconSet {
-	return iconSet{
-		play:          mustIcon(widget.NewIcon(icons.AVPlayArrow)),
-		pause:         mustIcon(widget.NewIcon(icons.AVPause)),
-		stop:          mustIcon(widget.NewIcon(icons.AVStop)),
-		next:          mustIcon(widget.NewIcon(icons.AVSkipNext)),
-		openFile:      mustIcon(widget.NewIcon(icons.EditorInsertDriveFile)),
-		openFolder:    mustIcon(widget.NewIcon(icons.FileFolderOpen)),
-		volumeUp:      mustIcon(widget.NewIcon(icons.AVVolumeUp)),
-		volumeOff:     mustIcon(widget.NewIcon(icons.AVVolumeOff)),
-		fullscreen:    mustIcon(widget.NewIcon(icons.NavigationFullscreen)),
-		fullscreenOut: mustIcon(widget.NewIcon(icons.NavigationFullscreenExit)),
-	}
-}
-
-func mustIcon(ic *widget.Icon, err error) *widget.Icon {
-	if err != nil {
+func init() {
+	if err := giode.RegisterIconsFS(iconFiles, "icons"); err != nil {
 		panic(err)
 	}
-	return ic
+}
+
+// iconSrc returns the registered icon name, for APIs that take an
+// icon.Source (the context menu). The icons are embedded, so a missing
+// one is a programming error.
+func iconSrc(name string) icon.Source {
+	src, ok := giode.LookupIcon(name)
+	if !ok {
+		panic(fmt.Sprintf("ui: icon %q is not registered", name))
+	}
+	return src
+}
+
+// glyph renders a registered icon as a square of size dp. Width and
+// Height are both set so the icon never takes a non-square box.
+func glyph(name string, size int, color string) giode.Element {
+	return giode.Icon(name, giode.Styles{
+		Width:  properties.Width(size),
+		Height: properties.Height(size),
+		Color:  color,
+	})
 }

@@ -6,8 +6,8 @@ Cross-platform video player built on Go + **libmpv** + **GLFW** + **Gio**
 Video is decoded and presented by libmpv through its render API, which keeps
 frames on the GPU end to end (zero-copy) and enables hardware decoding plus
 GPU tone mapping on every platform — VideoToolbox on macOS, D3D11VA on Windows,
-VAAPI on Linux. The controls are drawn with Gio, an immediate-mode GUI toolkit
-for Go.
+VAAPI on Linux. The controls are drawn with Giode (github.com/mehran9675/giode),
+a component library built on top of Gio, an immediate-mode GUI toolkit for Go.
 
 ## Requirements
 
@@ -17,57 +17,73 @@ for Go.
   `pkg-config` package)
 - Linux only: `zenity`, for the native file dialogs
 
-### macOS
+## Building
 
-```sh
-brew install mpv   # provides mpv headers, lib, and pkg-config file
-CGO_ENABLED=1 go build -o goplay .
-```
+The build scripts find the toolchain by themselves, check that every
+dependency is there, and stop with an error that says what is missing and
+how to install it:
 
-Verify: `./goplay somefile.mp4` opens a window with video and the control bar;
-hardware decode is active (`hwdec=auto` selects VideoToolbox). In the console,
-mpv will print `Using hardware decoding (videotoolbox)` when it engages.
+| | build | build and run (args go to the player) |
+|---|---|---|
+| Windows | `build.bat` | `run.bat [mediafile]` |
+| macOS / Linux | `./build.sh` | `./run.sh [mediafile]` |
+
+To skip the search, point a variable at a dependency yourself:
+
+| Variable | Platform | Meaning |
+|---|---|---|
+| `MINGW` | Windows | MinGW-w64 `bin` folder (contains `gcc.exe`) |
+| `LIBMPV` | all | libmpv dev package (Windows) or install prefix (macOS/Linux) |
+| `ANGLE` | Windows | folder with `libEGL.dll` + `libGLESv2.dll` |
+| `CC`, `PKG_CONFIG` | macOS/Linux | C compiler and pkg-config to use |
+
+The search logic lives in `scripts/windows.ps1` and `scripts/unix.sh`.
 
 ### Windows
 
-Use a MinGW-w64 toolchain plus libmpv dev files, then point `pkg-config` at
-the libmpv directory:
+Install Go, MinGW-w64 (e.g. MSYS2: `pacman -S mingw-w64-x86_64-gcc
+mingw-w64-x86_64-pkgconf`) and the libmpv dev package (`mpv-dev-x86_64-*.7z`
+from shinchiro/mpv-winbuild-cmake, extracted to `%USERPROFILE%\libmpv`).
+ANGLE is taken from an installed VS Code, Chrome or Edge.
 
-```powershell
-$env:PKG_CONFIG_PATH = 'C:\path\to\libmpv'
-$env:CGO_ENABLED     = '1'
-$env:CC              = 'gcc'
-go build -o goplay.exe .
+`build.bat` builds `goplay.exe` with `-H=windowsgui` (no console window);
+`run.bat` builds `goplay-debug.exe` with a console so mpv's logs are visible.
+Both copy the runtime DLLs next to the exe, since the app folder is searched
+before `PATH` (which avoids picking up an incompatible `libwinpthread-1.dll`
+from another MinGW install such as Git's):
+
+- `libmpv-2.dll`: the mpv runtime
+- `libgcc_s_seh-1.dll`, `libstdc++-6.dll`, `libwinpthread-1.dll`: the MinGW
+  C/C++ runtime
+- `libEGL.dll`, `libGLESv2.dll`: ANGLE. The app creates an OpenGL ES 3.0
+  context through ANGLE; Gio loads `libGLESv2.dll` unconditionally and libmpv
+  shares that context.
+
+If `mpv.pc` is missing from the libmpv folder, `build.bat` generates one.
+
+### macOS
+
+```sh
+xcode-select --install
+brew install go mpv pkg-config
+./build.sh
 ```
 
-The DLLs the exe needs at runtime must be next to `goplay.exe` (the app
-folder is searched before `PATH`, which avoids picking up an incompatible
-`libwinpthread-1.dll` from another MinGW install such as Git's):
-
-```powershell
-Copy-Item C:\path\to\mingw64\bin\libgcc_s_seh-1.dll .
-Copy-Item C:\path\to\mingw64\bin\libstdc++-6.dll   .
-Copy-Item C:\path\to\mingw64\bin\libwinpthread-1.dll .
-Copy-Item C:\path\to\libmpv\libmpv-2.dll .
-Copy-Item C:\path\to\angle\libEGL.dll .
-Copy-Item C:\path\to\angle\libGLESv2.dll .
-```
-
-(`libmpv-2.dll` is the mpv runtime; the next three are the MinGW C/C++
-runtime. On Windows the app creates an OpenGL ES 3.0 context through ANGLE —
-Gio loads `libGLESv2.dll` unconditionally and libmpv shares that context — so
-ANGLE's `libEGL.dll` and `libGLESv2.dll` must be present too.)
-
-`build.bat` does all of the above in one step: it sets the toolchain
-environment, builds with `-ldflags "-H=windowsgui"` (so no console window
-appears alongside the app), and copies the DLLs next to `goplay.exe`.
+Verify: `./run.sh somefile.mp4` opens a window with video and the control bar;
+hardware decode is active (`hwdec=auto` selects VideoToolbox). In the console,
+mpv will print `Using hardware decoding (videotoolbox)` when it engages.
 
 ### Linux
 
 ```sh
-sudo apt install libmpv-dev zenity   # Debian/Ubuntu
-CGO_ENABLED=1 go build -o goplay .
+# Debian/Ubuntu
+sudo apt install build-essential pkg-config libmpv-dev zenity \
+  libx11-dev libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev
+./build.sh
 ```
+
+The X11/OpenGL headers are for GLFW, which is compiled from source.
+`build.sh` prints the matching `dnf` or `pacman` command on Fedora and Arch.
 
 ## Usage
 
@@ -75,25 +91,47 @@ CGO_ENABLED=1 go build -o goplay .
 goplay [mediafile]
 ```
 
-Or start with no argument and use the Open buttons / drag a file onto the
-window.
+Or start with no argument and open a file or folder from the right-click
+menu (or with `O` / `D`), or drag a file onto the window.
+
+Outside fullscreen the window has its own title bar (drag it to move the
+window, double-click it to maximize) and the control bar sits in a strip
+below the video. In fullscreen both are hidden; the control bar shows
+again while the pointer is over the bottom of the screen.
 
 | Input               | Action                                  |
 | ------------------- | --------------------------------------- |
-| buttons             | open file, open folder, play/pause, stop, next, fullscreen |
+| buttons             | play/pause, stop, next, mute, settings, fullscreen |
 | Space               | play / pause (replay at end)            |
 | S / N               | stop / next in playlist                 |
 | O / D               | open file / open folder                 |
-| ← / →               | seek −/+ 5 s                            |
-| ↑ / ↓               | volume                                  |
+| ← / →               | seek back / forward (5 s by default)    |
+| ↑ / ↓               | volume (5% by default)                  |
 | F                   | fullscreen                              |
-| Esc                 | close the context menu, else quit      |
+| Esc                 | close the menu or settings, leave fullscreen, else quit |
 | click/drag seek bar | scrub                                   |
-| right-click         | context menu: open file / open folder   |
-| drag empty area     | move the window                        |
+| speaker button      | mute / restore volume                   |
+| right-click         | context menu: open, subtitles, video and audio tracks, aspect ratio, speed, loop, settings, fullscreen, quit |
+| drag title bar or video | move the window                     |
 
 Opening a folder queues every media file in it (sorted); playback advances
 automatically and the Next button/`N` skips ahead.
+
+## Settings
+
+The settings dialog (gear button, or right-click → Settings…) covers
+playback (resume, auto-advance, seek and volume steps, hardware decoding),
+video (scaling, debanding, deinterlacing, motion interpolation, HDR tone
+mapping, picture adjustments), audio (output device, language, channels,
+loudness normalization, pitch correction, delay), subtitles (language,
+auto-loading, size, position, color, outline, delay, ASS styling), the
+interface, and caching. Changes apply immediately.
+
+Settings are saved to `settings.json` in goplay's config folder
+(`%AppData%\goplay` on Windows, `~/Library/Application Support/goplay` on
+macOS, `~/.config/goplay` on Linux). Any other mpv option can go in
+`mpv.conf` in the same folder (Settings → Advanced → Edit mpv.conf…); it is
+read at startup and overrides goplay's own settings.
 
 ## How it works
 
@@ -131,15 +169,17 @@ internal/libmpv/      minimal cgo binding for the libmpv client + render APIs
   render.go           OpenGL render context (get_proc_address via GLFW)
 internal/glfwutil/    GLFW fullscreen + monitor work-area helpers
 internal/app/         app controller: mpv lifecycle, playlist, file dialogs, loop
-internal/ui/          Gio controls: transport, seek bar, volume, context menu
+  prefs.go            applying settings, window controls
+internal/settings/    settings table (Defs), mpv mapping, JSON store
+internal/ui/          Giode chrome: title bar, controls, context menu, settings
   ui.go               UI struct, Layout entry, keyboard handling, message
   controller.go       Controller interface (what the UI drives)
   controls.go         bottom control bar
-  slider.go           seek + volume sliders
-  buttons.go          icon-button helper
+  icons.go, icons/    embedded SVG icons (Material Design, Apache 2.0)
+  slider.go           seek + volume slider sync
   menu.go             right-click context menu
-  icons.go            Material Design icon set
-  menu_test.go        context-menu interaction tests
+  prefs.go            settings dialog
+  stack.go            layout helpers that keep dropdowns anchored
 ```
 
 ## Known limitations
