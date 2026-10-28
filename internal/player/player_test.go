@@ -1,6 +1,7 @@
 package player
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,7 +125,8 @@ func TestPlaylistAndTracks(t *testing.T) {
 	if subs := p.State.TracksOf(Subtitle); len(subs) != 2 {
 		t.Errorf("subtitle tracks = %+v", subs)
 	}
-	if c := p.State.Chapters[1]; c.Title != "Middle part" || c.Time != 15 {
+	// FFmpeg versions round chapter times slightly differently.
+	if c := p.State.Chapters[1]; c.Title != "Middle part" || math.Abs(c.Time-15) > 0.1 {
 		t.Errorf("chapter 2 = %+v", c)
 	}
 	p.SelectTrack(Subtitle, 2)
