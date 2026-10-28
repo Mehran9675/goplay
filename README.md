@@ -17,8 +17,7 @@ Made for macOS first, and built for Windows and Linux too.
 - Resumes where you left off. Opening one episode queues the rest of the
   folder, in natural order (2 before 10).
 - Recent files on the start screen, with how far you got.
-- Drag and drop files, folders and subtitles (Windows for now), or paste a
-  link or path.
+- Drag and drop files, folders and subtitles, or paste a link or path.
 
 **Controls**
 - In a window, the title bar and the controls sit above and below the
@@ -28,7 +27,8 @@ Made for macOS first, and built for Windows and Linux too.
   the time and chapter under the pointer.
 - Speed from 0.25× to 4× with pitch kept, frame stepping, A–B repeat, file
   and playlist repeat, shuffle, go to a time.
-- Playlist and chapters panel; picture-in-picture; always on top.
+- Playlist and chapters panel; picture-in-picture in the screen's corner;
+  always on top.
 - Click to pause, double-click for fullscreen, wheel for volume (or seeking).
 - A command palette (Ctrl+K, ⌘K on macOS) for every command, and every
   shortcut can be changed.
@@ -116,16 +116,15 @@ sudo apt install build-essential pkg-config libmpv-dev zenity \
 
 ### Windows
 
-Install Go, MinGW-w64 (MSYS2: `pacman -S mingw-w64-x86_64-gcc
-mingw-w64-x86_64-pkgconf`) and the libmpv development package
-(`mpv-dev-x86_64-*.7z` from shinchiro/mpv-winbuild-cmake, extracted to
-`%USERPROFILE%\libmpv`). ANGLE comes from an installed VS Code, Chrome or Edge.
-`build.bat` copies libmpv and ANGLE to `build\native`, where `giode.toml`
-bundles them from, and makes `dist\windows\goplay.exe` with them beside it;
-`run.bat` builds and runs it.
+Install Go, MinGW-w64 and ANGLE (MSYS2: `pacman -S mingw-w64-x86_64-gcc
+mingw-w64-x86_64-pkgconf mingw-w64-x86_64-angleproject`) and the libmpv
+development package (`mpv-dev-x86_64-*.7z` from shinchiro/mpv-winbuild-cmake,
+extracted to `%USERPROFILE%\libmpv`). `build.bat` copies libmpv to
+`build\native`, and the giode CLI makes `dist\windows\goplay.exe` with libmpv,
+ANGLE and the DLLs they need beside it; `run.bat` builds and runs it.
 
-To skip the search, set `LIBMPV` (all platforms), `MINGW` and `ANGLE`
-(Windows), or `CC` and `PKG_CONFIG` (macOS and Linux).
+To skip the search, set `LIBMPV` (all platforms), `MINGW` (Windows), or `CC`
+and `PKG_CONFIG` (macOS and Linux).
 
 Optional at runtime: **yt-dlp** for web pages, **FFmpeg** for casting files
 TVs can't play, and on Linux **zenity** for file dialogs.

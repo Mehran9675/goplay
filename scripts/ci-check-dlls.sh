@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Fails when a Windows build in dist/windows imports a DLL that's neither
 # beside it nor part of Windows, so CI never ships a package that can't
-# start. (The giode CLI should bundle every imported DLL itself; see
-# docs/giode-gaps.md.)
+# start. The giode CLI bundles imported DLLs itself; this guards releases
+# against one it couldn't find (it only warns).
 set -euo pipefail
 cd "$(dirname "$0")/../dist/windows"
 missing=0

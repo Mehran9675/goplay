@@ -96,7 +96,7 @@ func (a *App) registerCommands() {
 		toggle(act("fullscreen", "Fullscreen", "Video", k("F", "F11"), func() { a.setFullscreen(!a.g.Fullscreen()) }), a.g.Fullscreen),
 		toggle(act("maximize", "Maximize", "Video", nil, func() { windowCtl{a}.ToggleMaximize() }), a.g.Maximized),
 		toggle(act("pip", "Picture in Picture", "Video", k("P"), a.togglePiP), func() bool { return a.ui.pip }),
-		toggle(act("always_on_top", "Always on Top", "Video", k("T"), a.toggleOnTop), func() bool { return a.onTop }),
+		toggle(act("always_on_top", "Always on Top", "Video", k("T"), a.toggleOnTop), func() bool { return a.g.AlwaysOnTop() }),
 		when(act("screenshot", "Take Screenshot", "Video", k("S"), func() { a.screenshot("subtitles") }), hasMedia),
 		when(act("screenshot_clean", "Take Screenshot Without Subtitles", "Video", k("Shift+S"), func() { a.screenshot("video") }), hasMedia),
 		when(act("rotate", "Rotate 90°", "Video", k("Mod+R"), a.rotate), hasMedia),
@@ -411,7 +411,7 @@ func (a *App) toggleSetting(key, label string) {
 }
 
 func (a *App) toggleOnTop() {
-	on := !a.onTop
+	on := !a.g.AlwaysOnTop()
 	a.setOnTop(on)
 	a.osd(onOff("Always on top", on))
 }

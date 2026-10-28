@@ -6,140 +6,76 @@ goplay needs, goplay doesn't work around it; this file describes what's
 missing. Things only a video player would ever need are in goplay itself and
 listed at the end.
 
-Everything the previous version of this file asked for has landed: the
-underlay, `ui.Frame` and the `host` package, the menu and tooltip fixes, menu
-shortcuts and check items, native library bundling, file types, context
-actions, cgo on Windows and CI setup hooks. goplay now uses them, and its own
-GLFW host and packaging scripts are gone.
-
-## Giode
-
-### 1. File drop on macOS and Linux
-
-`Config.OnFileDrop` only works on Windows. Dropping videos, folders and
-subtitle files onto the player is how many people open them, especially on
-macOS, goplay's main platform. With the GLFW host it worked everywhere; now it
-works only on Windows.
-
-- **macOS**: register the window's view for `NSPasteboardTypeFileURL`
-  (`registerForDraggedTypes:`) and deliver `performDragOperation:`'s URLs.
-- **Linux**: Gio's event loop consumes the X11 (XDND) and Wayland
-  (`wl_data_device`) drag-and-drop messages, so this needs Gio changes.
-
-Drag enter/leave events, for highlighting a drop target, would help too.
-
-### 2. Window position and the screen's size
-
-Picture in picture shrinks the window and keeps it on top, but can't move it
-to a corner of the screen: giode.App can't place a window or report the
-screen's work area. "Resize the window to fit each video" can't cap the size
-at the screen's either, so goplay uses a fixed 1280×800 dp limit.
-
-**Suggested:** `App.SetPosition(x, y)` (or `MoveTo(corner, margin)`), and
-`App.Screen()` returning the current monitor's bounds and work area in dp.
-
-### 3. Minimized windows on Windows
-
-Gio's Windows backend never reports `app.Minimized` in a `ConfigEvent`, so
-`OnWindowStateChange` never sees `WindowMinimized` there. `OnBackground`,
-documented as running "on desktops when the window is minimized", doesn't run
-on desktop at all (only Android and iOS call it). goplay's "Pause when
-minimized" uses `OnWindowStateChange` and works only where Gio reports the
-state.
-
-**Suggested:** report `Minimized` from `WM_SIZE`/`SIZE_MINIMIZED` (and restore
-on `SIZE_RESTORED`) in the patched Gio, and call `OnBackground`/`OnForeground`
-from window state on desktops as the doc says.
-
-### 4. Always on top at run time
-
-`Config.AlwaysOnTop` only applies at startup. goplay toggles it with
-`App.Window().Option(app.TopMost(on))`, which works but goes around giode.App.
-`App.SetAlwaysOnTop(bool)` and `App.AlwaysOnTop()` would match `SetFullscreen`
-and keep giode's own state right.
-
-### 5. The underlay's GL context
-
-- **Function lookup.** OpenGL engines in `Config.Underlay` need the context's
-  `GetProcAddress` (libmpv's render API asks for one). goplay resolves it
-  itself (`internal/mpv/glproc.go`: ANGLE's `eglGetProcAddress` on Windows,
-  EGL on Linux, `dlsym` on macOS), which every OpenGL engine would repeat.
-  `GPUTarget` could carry a `GetProcAddress func(name string) unsafe.Pointer`.
-- **Teardown.** An engine's GL resources must be freed on the render thread
-  with the context current, before the window's context goes away
-  (`mpv_render_context_free` must also run before the mpv core is
-  destroyed). There's no callback for that, so goplay lets the process exit
-  with mpv alive. **Suggested:** `Config.UnderlayRelease func()`, called on
-  the render thread before the context is destroyed.
-
-### 6. MCP
-
-goplay is tested with giode's MCP server, which found several of the problems
-above, but:
-
-- **`screenshot` is blank** (white) with `Underlay` and `RendererOpenGL`. It
-  should read the window's framebuffer after the frame, video included.
-- **No pointer or keyboard tools** besides clicks: hover (tooltips, a seek
-  bar's preview, a control bar that shows on hover), drag (sliders, seek
-  bars), right-click (context menus) and key presses (shortcuts) can't be
-  tested. Windows messages posted to the window don't reach Gio either,
-  since it reads pointer input. A `ui_pointer` tool (move, press and release
-  with a button, at a node or at coordinates) and `ui_key` (a key with
-  modifiers) would cover them.
+Everything the previous version of this file asked for has landed, and goplay
+uses it: file drops on every desktop (with a drop highlight from
+`App.FileDrag`), `Screen`, `Frame`, `SetPosition` and `MoveTo` (picture in
+picture goes to the screen's corner; "resize to the video" stays within the
+screen), minimized windows on Windows ("Pause when minimized"),
+`SetAlwaysOnTop`, `GPUTarget.GetProcAddress` and `UnderlayRelease` (goplay's
+own GL lookup is gone, and mpv's render context is freed on the render
+thread), the MCP screenshot with the underlay and `ui_pointer`/`ui_key`, and
+in the CLI Windows DLL imports, paths with variables and globs, ANGLE
+bundling, `{version}` in ldflags and package names with the CPU.
 
 ## Giode CLI
 
-### 1. Windows DLL imports are never found (bug)
+### 1. Rebuilding a Windows app empties its DLLs (bug)
 
-`native.Collect` reads a Windows binary's imports with Go's
-`(*pe.File).ImportedLibraries`, which Go's standard library has never
-implemented: it always returns nil. So no imported DLL is bundled, and no
-missing one is warned about. goplay's exe imports `libmpv-2.dll`, and nothing
-bundled it.
+On Windows, `native.Collect` looks for a binary's DLLs in the binary's own
+folder first (`find`: `dirs = append([]string{filepath.Dir(from)}, ...)`).
+For the app that folder is the output, `dist/windows`, so on a second
+`giode build windows` it finds the previous build's `libmpv-2.dll` there
+and copies it onto itself: `copyFile` opens the destination with `O_TRUNC`
+first, and the DLL ends up 0 bytes. The package is broken, and the build
+after that fails with `native libraries: libmpv-2.dll: EOF`. A stale DLL in
+`dist` would also win over a newer one in the search folders.
 
-**Fix:** collect the DLL names from `(*pe.File).ImportedSymbols()`, whose
-entries are `symbol:dll`, or read the import directory. Until then goplay
-lists its DLLs in `[native.windows] libraries`, which only works for DLLs
-that need nothing else. The libmpv it uses (shinchiro's build) is one, but
-ANGLE no longer is: Chrome, Edge and Electron now link it into their own
-binaries, so the only ANGLE left is MSYS2's `angleproject`, which needs
-MinGW's C++ runtime (`libstdc++-6.dll`, `libgcc_s_seh-1.dll` or `libc++.dll`,
-`libwinpthread-1.dll`, `zlib1.dll`).
+**Fix:** leave the output folder out of the search for the app itself
+(looking beside a bundled DLL for its own imports is fine), skip copying a
+file onto itself, or empty `dist/<platform>` before building. CI always
+builds into a clean folder, so only local rebuilds hit this.
 
-**This blocks goplay's Windows packages.** Local builds work with an older
-self-contained ANGLE (VS Code's, for one), but CI has no such copy, and its
-packages would not start. CI checks every package's imports
-(`scripts/ci-check-dlls.sh`) and fails the Windows jobs until the CLI
-bundles imported DLLs; with the fix, the CI's current setup (MSYS2's ANGLE
-listed in `libraries`, its runtime found through `search`) works as is.
+### 2. VS Code's ANGLE isn't found
 
-### 2. Paths in giode.toml
+`angleDirs` looks in `%LOCALAPPDATA%\Programs\Microsoft VS Code` and
+`C:\Program Files\Microsoft VS Code`, but VS Code keeps its DLLs in a folder
+named after its build (`Microsoft VS Code\6d62b1d5da\libEGL.dll`), and after
+an update there are two of them. So on a machine with VS Code and no MSYS2
+angleproject the build stops with "none was found for this CPU".
 
-`[native.windows] libraries` and `search` take fixed paths. ANGLE lives in a
-different place on every machine (an Edge, Chrome or VS Code install, MSYS2's
-`angleproject`), so goplay's build scripts copy it to `build/native` first.
-Environment variables (`$MSYSTEM_PREFIX/bin/libEGL.dll`) or globs in these
-paths would remove that step. With `renderer = "opengl"` the CLI could also
-find and bundle ANGLE itself, since `RendererOpenGL` requires it on Windows.
+**Fix:** also look in the install's subfolders (`Microsoft VS Code\*`),
+newest first. goplay's README asks Windows builders to install MSYS2's
+angleproject, which the CLI does find.
 
-### 3. The version in ldflags
+### 3. Warnings about DLLs that are part of Windows
 
-`$GIODE_VERSION` sets `app.version`, but `app.ldflags` can't refer to it, so
-an app's own version string (goplay's About box) doesn't follow the release
-tag. goplay's CI rewrites both (`scripts/ci-version.sh`). A `{version}`
-placeholder in `app.ldflags`, or the CLI setting a variable the app can read
-(`-X github.com/mehran9675/giode.AppVersion=...`), would fix it.
+`giode build windows` warns that goplay "needs AVICAP32.dll, WLDAP32.dll,
+bcryptprimitives.dll, vulkan-1.dll, not found". The first three are in
+System32 on every Windows; `vulkan-1.dll` comes with the graphics driver
+(libmpv loads Vulkan only when it's asked to use it). A warning that's
+always there hides the ones that matter.
 
-### 4. CI for ARM and file names per CPU
+**Fix:** treat a DLL found in `%SystemRoot%\System32` (or in a fuller list
+of system DLLs) as part of Windows, and `vulkan-1.dll` as the driver's.
 
-`giode ci` builds x64 only, in MSYS2's MINGW64. goplay's releases also have
-Linux and Windows ARM64 builds (GitHub's `ubuntu-24.04-arm` and
-`windows-11-arm` runners, MSYS2's CLANGARM64), so goplay keeps its own
-workflow. Also, `dmg` and `windows-installer` name their output without the
-CPU (`goplay-1.1.0.dmg`, `goplay-1.1.0-setup.exe`), so two builds of one
-release collide; goplay's CI renames them (`scripts/ci-collect.sh`).
-**Suggested:** an `arch` list in `[ci]`, and the CPU in every package's name
-(the `.deb`, `.rpm` and AppImage already have it).
+goplay's CI keeps its own check (`scripts/ci-check-dlls.sh`) so a release
+never ships a package that can't start, since the CLI only warns.
+
+## Giode
+
+### 1. The title at run time
+
+`Config.Title` is only the first title. goplay shows the playing file's
+title and sets it with `App.Window().Option(app.Title(...))`, which works
+but goes around giode.App. `App.SetTitle(string)` would match the other
+window calls.
+
+### 2. MCP: dragging files over the window
+
+`ui_pointer` and `ui_key` made hover, right-click, dragging and shortcuts
+testable. File drags still aren't: a `ui_file_drag` tool (enter, move, leave
+and drop with paths, at a node or coordinates) would test drop targets and
+their highlight. goplay's drop highlight is untested for that reason.
 
 ## In goplay itself (player-specific)
 
@@ -149,6 +85,9 @@ proposed for Giode:
 - the timeline (`internal/app/view_seek.go`): buffered ranges, chapter marks,
   A-B loop, a hover preview of time and chapter, keyframe seeks while dragging
 - 3D and 360° projection, casting (Chromecast, DLNA), the mpv binding
+- its release workflow: `giode ci` builds on tag pushes and adds web and
+  Android, while goplay builds when a release is published, runs its tests
+  first, and takes libmpv for Windows from shinchiro's builds
 
 Not Giode or the CLI, but worth knowing: Gio doesn't report media keys
 (play/pause on keyboards and headsets), so goplay can't react to them yet.

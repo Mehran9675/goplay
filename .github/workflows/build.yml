@@ -20,6 +20,9 @@ permissions:
 env:
   TAG: ${{ github.event.release.tag_name || inputs.tag }}
   REF: ${{ github.event.release.tag_name || inputs.tag || github.sha }}
+  # The giode CLI takes the version from the tag (v1.2.3), for the
+  # packages and goplay's own (giode.toml's app.ldflags {version}).
+  GIODE_VERSION: ${{ github.event.release.tag_name || inputs.tag }}
 
 jobs:
   macos:
@@ -47,7 +50,6 @@ jobs:
           GOPLAY_TEST_MEDIA="$RUNNER_TEMP/media/chapters.mkv" GOPLAY_TEST_MEDIA_DIR="$RUNNER_TEMP/media" go test ./...
       - name: Package
         run: |
-          scripts/ci-version.sh
           giode build -arch arm64 dmg
           scripts/ci-collect.sh macos arm64
       - name: Attach to the release
@@ -91,7 +93,6 @@ jobs:
           GOPLAY_TEST_MEDIA="$RUNNER_TEMP/media/chapters.mkv" GOPLAY_TEST_MEDIA_DIR="$RUNNER_TEMP/media" go test ./...
       - name: Package
         run: |
-          scripts/ci-version.sh
           giode build -arch ${{ matrix.arch }} linux deb rpm
           scripts/ci-collect.sh linux ${{ matrix.arch }}
       - name: Attach to the release
@@ -144,13 +145,12 @@ jobs:
             ${{ matrix.pkg }}-ffmpeg
             ${{ matrix.pkg }}-angleproject
             mingw-w64-ucrt-x86_64-nsis
-      - name: Get libmpv, ANGLE and the giode CLI
+      - name: Get libmpv and the giode CLI
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # shinchiro's libmpv is one self-contained DLL; ANGLE comes from
-          # MSYS2 (Chrome, Edge and Electron no longer ship it as DLLs).
-          # See giode.toml's [native.windows].
+          # shinchiro's libmpv is one self-contained DLL. The CLI bundles
+          # MSYS2's ANGLE (angleproject, above) and the DLLs it needs.
           set -x
           path_file="$(cygpath -u "$GITHUB_PATH")"
           mkdir -p build/native build/libmpv
@@ -168,7 +168,6 @@ jobs:
           cp -r build/libmpv/include/mpv "$MINGW_PREFIX/include/"
           cp build/libmpv/libmpv.dll.a "$MINGW_PREFIX/lib/"
           cp build/libmpv/mpv.pc "$MINGW_PREFIX/lib/pkgconfig/"
-          cp "$MINGW_PREFIX/bin/libEGL.dll" "$MINGW_PREFIX/bin/libGLESv2.dll" build/native/
           echo "$(cygpath -w "$PWD/build/native")" >> "$path_file"
           echo "C:\\msys64\\ucrt64\\bin" >> "$path_file"
           go install github.com/mehran9675/giode-cli/cmd/giode@latest
@@ -181,11 +180,8 @@ jobs:
       - name: Package
         run: |
           export PATH="$PATH:/c/msys64/ucrt64/bin"
-          scripts/ci-version.sh
           giode build -arch ${{ matrix.arch }} windows windows-installer
-          # MSYS2's ANGLE needs its C++ runtime, which the CLI doesn't bundle
-          # yet; this stops the release rather than ship a player that
-          # can't start.
+          # Stops the release rather than ship a player that can't start.
           scripts/ci-check-dlls.sh
           scripts/ci-collect.sh windows ${{ matrix.arch }}
       - name: Attach to the release

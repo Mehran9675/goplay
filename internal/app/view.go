@@ -14,6 +14,7 @@ import (
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 
+	"github.com/mehran9675/giode"
 	"github.com/mehran9675/giode/components/drawer"
 	"github.com/mehran9675/giode/components/menu"
 	"github.com/mehran9675/giode/components/titlebar"
@@ -49,9 +50,10 @@ type ui struct {
 	cursorHidden          bool
 	pointerTag            struct{}
 
-	pip            bool
-	pipRestore     image.Point // the window's size before, in dp
-	pipWasOnTop    bool
+	pip         bool
+	pipRestore  giode.Rect // the window's place and size before, in dp
+	pipHadFrame bool       // whether pipRestore's position is known
+	pipWasOnTop bool
 
 	video *videoArea
 
@@ -423,4 +425,3 @@ func (u *ui) flashPlayPause(playing bool) {
 
 func (a *App) toast(msg string)      { a.ui.toasts.Show(toaster.Info, msg) }
 func (a *App) toastError(msg string) { a.ui.toasts.Show(toaster.Error, msg) }
-
