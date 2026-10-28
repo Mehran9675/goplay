@@ -99,9 +99,19 @@ bundled it.
 
 **Fix:** collect the DLL names from `(*pe.File).ImportedSymbols()`, whose
 entries are `symbol:dll`, or read the import directory. Until then goplay
-lists its DLLs in `[native.windows] libraries`, which only works because the
-libmpv it uses (shinchiro's build) is a single self-contained DLL. MSYS2's
-libmpv, with dozens of dependencies, can't be bundled.
+lists its DLLs in `[native.windows] libraries`, which only works for DLLs
+that need nothing else. The libmpv it uses (shinchiro's build) is one, but
+ANGLE no longer is: Chrome, Edge and Electron now link it into their own
+binaries, so the only ANGLE left is MSYS2's `angleproject`, which needs
+MinGW's C++ runtime (`libstdc++-6.dll`, `libgcc_s_seh-1.dll` or `libc++.dll`,
+`libwinpthread-1.dll`, `zlib1.dll`).
+
+**This blocks goplay's Windows packages.** Local builds work with an older
+self-contained ANGLE (VS Code's, for one), but CI has no such copy, and its
+packages would not start. CI checks every package's imports
+(`scripts/ci-check-dlls.sh`) and fails the Windows jobs until the CLI
+bundles imported DLLs; with the fix, the CI's current setup (MSYS2's ANGLE
+listed in `libraries`, its runtime found through `search`) works as is.
 
 ### 2. Paths in giode.toml
 
