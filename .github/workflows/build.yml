@@ -136,7 +136,6 @@ jobs:
           update: true
           install: >-
             zip
-            p7zip
             ${{ matrix.pkg }}-${{ matrix.cc }}
             ${{ matrix.pkg }}-pkgconf
             ${{ matrix.pkg }}-ffmpeg
@@ -152,7 +151,14 @@ jobs:
           mkdir -p build/native build/libmpv
           tmp="$(cygpath -u "$RUNNER_TEMP")"
           gh release download -R shinchiro/mpv-winbuild-cmake -p "mpv-dev-${{ matrix.mpv }}-[0-9]*.7z" -D "$tmp"
-          7z x -y -o"build/libmpv" "$tmp"/mpv-dev-*.7z >/dev/null
+          # MSYS2's p7zip is too old for these archives' filters; Windows'
+          # 7-Zip or its own tar (libarchive) reads them.
+          archive="$(cygpath -w "$(ls "$tmp"/mpv-dev-*.7z)")"
+          if [ -x "/c/Program Files/7-Zip/7z.exe" ]; then
+            "/c/Program Files/7-Zip/7z.exe" x -y -obuild/libmpv "$archive" >/dev/null
+          else
+            /c/Windows/System32/tar.exe -xf "$archive" -C build/libmpv
+          fi
           cp build/libmpv/libmpv-2.dll build/native/
           prefix="$(cygpath -m "$PWD/build/libmpv")"
           printf 'prefix=%s\nlibdir=${prefix}\nincludedir=${prefix}/include\n\nName: mpv\nDescription: libmpv\nVersion: 0.40.0\nLibs: -L${libdir} -lmpv\nCflags: -I${includedir}\n' "$prefix" > build/libmpv/mpv.pc
