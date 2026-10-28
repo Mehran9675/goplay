@@ -1,0 +1,118 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install libmpv and FFmpeg
+        run: |
+          brew install mpv pkg-config ffmpeg
+          # Homebrew's mpv.pc can name a Cellar folder that isn't there;
+          # its stable prefix always is.
+          echo "CGO_LDFLAGS=-L$(brew --prefix)/lib" >> "$GITHUB_ENV"
+          echo "CGO_CFLAGS=-I$(brew --prefix)/include" >> "$GITHUB_ENV"
+      - name: Make test videos
+        run: scripts/test-media.sh "$RUNNER_TEMP/media"
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        env:
+          GOPLAY_TEST_MEDIA: ${{ runner.temp }}/media/chapters.mkv
+          GOPLAY_TEST_MEDIA_DIR: ${{ runner.temp }}/media
+        run: go test ./...
+      - name: Build
+        run: ./build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goplay-macos-arm64
+          path: goplay
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install libmpv, FFmpeg and GLFW's build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmpv-dev ffmpeg pkg-config \
+            libx11-dev libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev
+      - name: Make test videos
+        run: scripts/test-media.sh "$RUNNER_TEMP/media"
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        env:
+          GOPLAY_TEST_MEDIA: ${{ runner.temp }}/media/chapters.mkv
+          GOPLAY_TEST_MEDIA_DIR: ${{ runner.temp }}/media
+        run: go test ./...
+      - name: Build
+        run: ./build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goplay-linux-amd64
+          path: goplay
+
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          path-type: inherit
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-mpv
+            mingw-w64-ucrt-x86_64-ffmpeg
+      - name: Make test videos
+        run: scripts/test-media.sh "$RUNNER_TEMP/media"
+      - name: Vet
+        env:
+          CGO_ENABLED: "1"
+        run: go vet ./...
+      - name: Test
+        env:
+          CGO_ENABLED: "1"
+          GOPLAY_TEST_MEDIA_DIR: ${{ runner.temp }}/media
+        run: |
+          export GOPLAY_TEST_MEDIA="$GOPLAY_TEST_MEDIA_DIR/chapters.mkv"
+          go test ./...
+      - name: Build
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          version="$(git describe --tags --always --dirty)"
+          go build -ldflags "-H=windowsgui -X github.com/mehran9675/goplay/internal/app.Version=$version" -o goplay.exe .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goplay-windows-amd64
+          path: goplay.exe
