@@ -148,6 +148,8 @@ jobs:
           # shinchiro's libmpv is one self-contained DLL; ANGLE comes from
           # Edge, whose DLLs need nothing else. See giode.toml's
           # [native.windows].
+          set -x
+          env_file="$(cygpath -u "$GITHUB_ENV")" path_file="$(cygpath -u "$GITHUB_PATH")"
           mkdir -p build/native build/libmpv
           tmp="$(cygpath -u "$RUNNER_TEMP")"
           gh release download -R shinchiro/mpv-winbuild-cmake -p "mpv-dev-${{ matrix.mpv }}-[0-9]*.7z" -D "$tmp"
@@ -157,15 +159,18 @@ jobs:
           cp build/libmpv/libmpv-2.dll build/native/
           prefix="$(cygpath -m "$PWD/build/libmpv")"
           printf 'prefix=%s\nlibdir=${prefix}\nincludedir=${prefix}/include\n\nName: mpv\nDescription: libmpv\nVersion: 0.40.0\nLibs: -L${libdir} -lmpv\nCflags: -I${includedir}\n' "$prefix" > build/libmpv/mpv.pc
-          echo "PKG_CONFIG_PATH=$prefix" >> "$GITHUB_ENV"
-          angle="$(ls -d "/c/Program Files (x86)/Microsoft/Edge/Application"/*/libEGL.dll "/c/Program Files/Microsoft/Edge/Application"/*/libEGL.dll 2>/dev/null | head -1)"
+          echo "PKG_CONFIG_PATH=$prefix" >> "$env_file"
+          angle=""
+          for f in "/c/Program Files (x86)/Microsoft/Edge/Application"/*/libEGL.dll "/c/Program Files/Microsoft/Edge/Application"/*/libEGL.dll; do
+            if [ -f "$f" ]; then angle="$f"; break; fi
+          done
           if [ -n "$angle" ]; then
             cp "$angle" "$(dirname "$angle")/libGLESv2.dll" build/native/
           else
             cp "$MINGW_PREFIX/bin/libEGL.dll" "$MINGW_PREFIX/bin/libGLESv2.dll" build/native/
           fi
-          echo "$(cygpath -w "$PWD/build/native")" >> "$GITHUB_PATH"
-          echo "C:\\msys64\\ucrt64\\bin" >> "$GITHUB_PATH"
+          echo "$(cygpath -w "$PWD/build/native")" >> "$path_file"
+          echo "C:\\msys64\\ucrt64\\bin" >> "$path_file"
           go install github.com/mehran9675/giode-cli/cmd/giode@latest
       - name: Test
         run: |
