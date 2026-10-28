@@ -42,7 +42,7 @@ jobs:
           # its stable prefix always is.
           echo "CGO_LDFLAGS=-L$(brew --prefix)/lib" >> "$GITHUB_ENV"
           echo "CGO_CFLAGS=-I$(brew --prefix)/include" >> "$GITHUB_ENV"
-          go install github.com/mehran9675/giode-cli/cmd/giode@latest
+          GOPROXY=direct go install github.com/mehran9675/giode-cli/cmd/giode@latest
       - name: Test
         run: |
           scripts/test-media.sh "$RUNNER_TEMP/media"
@@ -85,7 +85,7 @@ jobs:
           sudo apt-get install -y libmpv-dev ffmpeg pkg-config gcc \
             libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev \
             libffi-dev libxcursor-dev libvulkan-dev
-          go install github.com/mehran9675/giode-cli/cmd/giode@latest
+          GOPROXY=direct go install github.com/mehran9675/giode-cli/cmd/giode@latest
       - name: Test
         run: |
           scripts/test-media.sh "$RUNNER_TEMP/media"
@@ -170,7 +170,7 @@ jobs:
           cp build/libmpv/mpv.pc "$MINGW_PREFIX/lib/pkgconfig/"
           echo "$(cygpath -w "$PWD/build/native")" >> "$path_file"
           echo "C:\\msys64\\ucrt64\\bin" >> "$path_file"
-          go install github.com/mehran9675/giode-cli/cmd/giode@latest
+          GOPROXY=direct go install github.com/mehran9675/giode-cli/cmd/giode@latest
       - name: Test
         run: |
           export PATH="$PWD/build/native:$PATH"
