@@ -53,14 +53,54 @@ Name: "{autodesktop}\goplay"; Filename: "{app}\goplay.exe"; IconFilename: "{app}
 Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "goplay"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\DefaultIcon"; ValueType: string; ValueData: "{app}\goplay.ico"
 Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\shell\open\command"; ValueType: string; ValueData: """{app}\goplay.exe"" ""%1"""
-#define Types "mkv webm mp4 m4v mov avi ts m2ts mts flv wmv mpg mpeg ogv vob 3gp mp3 flac ogg opus m4a aac wav wma"
-#sub OpenWith
-  #define T Copy(Types, 1, Pos(" ", Types + " ") - 1)
-Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".{#T}"; ValueData: ""
-Root: HKA; Subkey: "Software\Classes\.{#T}\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
-  #define Types Copy(Types, Pos(" ", Types + " ") + 1, Len(Types))
-#endsub
-#for {0; Len(Types) > 0; 0} OpenWith
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".mkv"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.mkv\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".webm"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.webm\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".mp4"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.mp4\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".m4v"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.m4v\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".mov"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.mov\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".avi"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.avi\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".ts"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.ts\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".m2ts"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.m2ts\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".mts"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.mts\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".flv"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.flv\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".wmv"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.wmv\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".mpg"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.mpg\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".mpeg"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.mpeg\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".ogv"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.ogv\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".vob"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.vob\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".3gp"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.3gp\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".mp3"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.mp3\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".flac"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.flac\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".ogg"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.ogg\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".opus"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.opus\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".m4a"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.m4a\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".aac"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.aac\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".wav"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.wav\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\goplay.exe\SupportedTypes"; ValueType: string; ValueName: ".wma"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.wma\OpenWithList\goplay.exe"; ValueType: none; Flags: uninsdeletekey
 
 ; Play with GoPlay, on video and audio files (whatever app opens them) and
 ; on folders. On Windows 11 it's under "Show more options".
