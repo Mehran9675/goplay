@@ -81,7 +81,30 @@ the component packages directly instead.
 **Suggested:** move `App` to a subpackage (`giode/app`), or add a re-export
 package without it (`giode/ui`), so custom hosts can use the short names.
 
-### 4. Smaller component gaps
+### 4. Bugs: menus fill the window, tooltips cover their trigger
+
+- **Menu panels are as wide as the window.** `measureWidth` lays each row out
+  with `width == 0`, as `Row{Align: Center, Wrap: NoWrap}` holding a label
+  `Box{FlexGrow: 1}`. A no-wrap row with a growing child takes the full
+  `Constraints.Max.X` even when nothing else needs the space. The wrapping
+  row hugs its content. In measurement the label must not grow: drop
+  `FlexGrow` while `r.width == 0`, as is already done for `Width`. Or make
+  no-wrap rows hug like wrapping rows when the free space is only the
+  constraint. This affects every menu and submenu, not just goplay's;
+  Giode's tests don't catch it because they use a 400 px window.
+  Reproduce: measure `Row(Styles{Wrap: WrapNoWrap}, Box(Styles{FlexGrow: 1},
+  Text("Play")))` with `Max.X = 1000`; it reports 1000.
+- **Tooltips flip onto the control they describe.** `Tooltip.Layout` anchors
+  the panel at the trigger's bottom edge plus 6 dp. When that overflows the
+  window, `kit.ClampPos` flips it to `anchor.Y - size.Y`. That point is still
+  below the trigger's top, so the tooltip covers the button. For a control
+  bar at the bottom of the window, that happens on every button. Flipping
+  needs the trigger's top: put the panel at `trigger.Y - 6dp - size.Y`.
+  `RegisterPortal` could take the anchor's rectangle, or Tooltip could take
+  a placement (`Above`, `Below`, `Auto`), with `Auto` flipping around the
+  trigger.
+
+### 5. Smaller component gaps
 
 - **TitleBar has no `Styles(st)` setter.** Button, IconButton and Drawer have
   one. goplay's bar is solid in a window and a transparent fade over

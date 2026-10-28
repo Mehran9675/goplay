@@ -347,8 +347,10 @@ func (w *Window) install() {
 			return
 		}
 		w.updateResizeCursor()
+		// Always Move: the router turns it into Drag while a button is
+		// down, and rejects Drag as input.
 		w.Router.Queue(pointer.Event{
-			Kind:      w.moveKind(),
+			Kind:      pointer.Move,
 			Source:    pointer.Mouse,
 			Time:      w.now(),
 			Position:  w.ToPx(w.cursor),
@@ -485,13 +487,6 @@ func (w *Window) install() {
 }
 
 func (w *Window) now() time.Duration { return time.Since(w.start) }
-
-func (w *Window) moveKind() pointer.Kind {
-	if w.buttons != 0 {
-		return pointer.Drag
-	}
-	return pointer.Move
-}
 
 // textFocused reports whether a text editor has keyboard focus.
 func (w *Window) textFocused() bool {

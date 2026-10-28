@@ -182,13 +182,18 @@ func (s *seekBar) preview(gtx layout.Context, t float64, x float32) {
 	}
 	origin := elements.AbsolutePosition()
 	anchor := image.Pt(origin.X+int(x)-gtx.Dp(40), origin.Y-gtx.Dp(38))
+	box := elements.Box(styles.Styles{
+		Background:   colSurface2,
+		BorderRadius: 6,
+		Padding:      properties.SymmetricInset(10, 5),
+		BoxShadow:    properties.BoxShadow{Y: 2, Blur: 8, Color: "#00000099"},
+	}, elements.Text(label, styles.Styles{Color: colText, FontSize: 12}))
 	elements.RegisterPortal(gtx, anchor, func() elements.Element {
-		return elements.Box(styles.Styles{
-			Background:   colSurface2,
-			BorderRadius: 6,
-			Padding:      properties.SymmetricInset(10, 5),
-			BoxShadow:    properties.BoxShadow{Y: 2, Blur: 8, Color: "#00000099"},
-		}, elements.Text(label, styles.Styles{Color: colText, FontSize: 12}))
+		// Portals get the whole window as their minimum; hug the label.
+		return elements.Raw(func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min = image.Point{}
+			return box.Layout(gtx)
+		})
 	})
 }
 
