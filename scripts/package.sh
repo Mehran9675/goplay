@@ -151,6 +151,9 @@ EOF
 
 	# The Debian package, depending on the libraries the binary links.
 	debarch="$(dpkg --print-architecture)"
+	# Debian versions start with a digit: v1.2.3 is 1.2.3, a dev build 0~dev.
+	debver="${version#v}"
+	[[ "$debver" =~ ^[0-9] ]] || debver="0~$debver"
 	pkg="$dist/deb"
 	install -Dm755 "$out/goplay" "$pkg/usr/bin/goplay"
 	install -Dm644 "$out/goplay.desktop" "$pkg/usr/share/applications/goplay.desktop"
@@ -164,7 +167,7 @@ EOF
 	rm -rf "$pkg/debian"
 	cat >"$pkg/DEBIAN/control" <<EOF
 Package: goplay
-Version: ${version#v}
+Version: $debver
 Architecture: $debarch
 Maintainer: Mehran <61628815+Mehran9675@users.noreply.github.com>
 Installed-Size: $(du -sk "$pkg/usr" | cut -f1)
@@ -178,7 +181,7 @@ Description: video player for files, streams, 3D and casting
  stereoscopic 3D and 360-degree video, and casts to Chromecast and DLNA
  devices.
 EOF
-	dpkg-deb --root-owner-group --build "$pkg" "$dist/goplay_${version#v}_$debarch.deb" >/dev/null
+	dpkg-deb --root-owner-group --build "$pkg" "$dist/goplay_${debver}_$debarch.deb" >/dev/null
 	rm -rf "$pkg" "$out"
 	;;
 
