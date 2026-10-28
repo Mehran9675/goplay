@@ -115,7 +115,7 @@ func New(files, commands []string, icon []byte) (*App, error) {
 	a.loadPrefs()
 
 	a.g = giode.New(giode.Config{
-		Title:       "goplay",
+		Title:       "GoPlay",
 		Size:        image.Pt(960, 600),
 		MinSize:     image.Pt(360, 240),
 		Resizable:   true,
@@ -176,12 +176,12 @@ func (a *App) loadPrefs() {
 	}
 	s, err := settings.Load(path)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "goplay: settings:", err)
+		fmt.Fprintln(os.Stderr, "GoPlay: settings:", err)
 	}
 	a.settings = s
 	h, err := library.LoadHistory(histPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "goplay: recent files:", err)
+		fmt.Fprintln(os.Stderr, "GoPlay: recent files:", err)
 	}
 	a.history = h
 }
@@ -460,9 +460,9 @@ func (a *App) afterPlayerChange() {
 	st := &a.player.State
 	playing := !st.Idle && !st.Paused && !a.casting()
 	a.g.KeepScreenOn(playing && st.HasVideo())
-	title := "goplay"
+	title := "GoPlay"
 	if !st.Idle && st.Title != "" {
-		title = st.Title + " — goplay"
+		title = st.Title + " — GoPlay"
 	}
 	if title != a.title {
 		a.title = title

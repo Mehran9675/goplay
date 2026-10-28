@@ -1,6 +1,6 @@
 name: Release builds
 
-# Builds goplay with the giode CLI for macOS, Linux and Windows on
+# Builds GoPlay with the giode CLI for macOS, Linux and Windows on
 # Intel/AMD and ARM when a release is published, and attaches the
 # packages to it. A manual run with a tag builds that release again;
 # without one it builds the chosen branch and keeps the packages as the
@@ -21,7 +21,7 @@ env:
   TAG: ${{ github.event.release.tag_name || inputs.tag }}
   REF: ${{ github.event.release.tag_name || inputs.tag || github.sha }}
   # The giode CLI takes the version from the tag (v1.2.3), for the
-  # packages and goplay's own (giode.toml's app.ldflags {version}).
+  # packages and GoPlay's own (giode.toml's app.ldflags {version}).
   GIODE_VERSION: ${{ github.event.release.tag_name || inputs.tag }}
 
 jobs:

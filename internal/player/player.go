@@ -40,7 +40,7 @@ var baseOptions = []Option{
 	// going idle, so the picture doesn't vanish and Play replays.
 	{"keep-open", "yes"},
 	{"idle", "yes"},
-	{"screenshot-template", "goplay-%F-%wH.%wM.%wS"},
+	{"screenshot-template", "GoPlay-%F-%wH.%wM.%wS"},
 	// Built-in scripts that goplay's own UI replaces. Older mpv
 	// versions lack some of these options; they're skipped there.
 	{"load-console", "no"},

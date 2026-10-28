@@ -41,7 +41,7 @@ func (a *App) registerCommands() {
 		when(act("reveal", "Show in Folder", "File", nil, a.revealCurrent), func() bool { return !st.Idle && !isURL(st.Path) }),
 		when(act("copy_path", "Copy Path or Link", "File", nil, a.copyCurrentPath), hasMedia),
 		when(act("close_media", "Close", "File", k("Mod+W"), p.Stop), hasMedia),
-		act("quit", "Quit goplay", "File", k("Mod+Q"), a.Quit),
+		act("quit", "Quit GoPlay", "File", k("Mod+Q"), a.Quit),
 
 		// Playback
 		when(act("play_pause", "Play / Pause", "Playback", k("Space", "K"), a.togglePause), hasMedia),
@@ -131,7 +131,7 @@ func (a *App) registerCommands() {
 		act("shortcuts", "Keyboard Shortcuts", "View", k("Shift+/", "F1"), func() { a.ui.showSettings("Shortcuts") }),
 		act("log", "mpv Log", "View", nil, func() { a.ui.showLog() }),
 		act("config_folder", "Open Configuration Folder", "View", nil, a.openConfigFolder),
-		act("about", "About goplay", "View", nil, func() { a.ui.showAbout() }),
+		act("about", "About GoPlay", "View", nil, func() { a.ui.showAbout() }),
 	)
 
 	// 1 to 9 jump to 10% to 90%, 0 to the start.

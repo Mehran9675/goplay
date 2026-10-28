@@ -31,7 +31,7 @@ func main() {
 			files = nil
 			goto parsed
 		case arg == "--version" || arg == "-v":
-			fmt.Println("goplay", app.Version)
+			fmt.Println("GoPlay", app.Version)
 			return
 		case arg == "--help" || arg == "-h":
 			fmt.Print(usage)
@@ -74,6 +74,6 @@ palette (Ctrl+K / Cmd+K).
 // no console) as well as on stderr, and exits.
 func fatal(err error) {
 	log.Print(err)
-	zenity.Error(err.Error(), zenity.Title("goplay"))
+	zenity.Error(err.Error(), zenity.Title("GoPlay"))
 	os.Exit(1)
 }

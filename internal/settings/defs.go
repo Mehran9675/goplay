@@ -301,7 +301,7 @@ var Defs = []Def{
 			return []MPVOption{{"ytdl-format", "bestvideo[height<=?" + v + "]+bestaudio/best[height<=?" + v + "]/best"}}
 		}},
 	{Key: KeyPassKeys, Section: "Advanced", Label: "Send other keys to mpv", Kind: Toggle, Default: "yes",
-		Help: "Keys goplay doesn't use go to mpv, so bindings in input.conf and scripts work."},
+		Help: "Keys GoPlay doesn't use go to mpv, so bindings in input.conf and scripts work."},
 	{Key: KeyMPVConf, Section: "Advanced", Label: "Load mpv.conf, input.conf and scripts", Kind: Toggle, Default: "yes", Restart: true},
 	{Key: KeyLogLevel, Section: "Advanced", Label: "mpv log detail", Kind: Choice, Default: "warn", Restart: true,
 		Help:    "What the log window shows.",
