@@ -29,14 +29,15 @@ func newMenu() *menu.Menu {
 		DisabledColor(colFaint)
 }
 
-// check appends a row with a checkmark when on; unchecked rows keep the
-// column so labels line up.
-func check(m *menu.Menu, label string, on bool, fn func()) {
-	icon := "blank"
-	if on {
-		icon = "check"
-	}
-	m.IconItem(src(icon), label, fn)
+// check appends an on/off row with a checkmark while on reports true,
+// and radio one of a group of choices with a dot while it's the one
+// chosen. Both are read every frame, so an open menu follows changes.
+func check(m *menu.Menu, label string, on func() bool, fn func()) {
+	m.CheckItem(label, on, fn)
+}
+
+func radio(m *menu.Menu, label string, on func() bool, fn func()) {
+	m.RadioItem(label, on, fn)
 }
 
 // item appends a command by its ID: its title, greyed out when it can't
@@ -50,7 +51,7 @@ func (u *ui) item(m *menu.Menu, id string) {
 	case !act.IsEnabled():
 		m.DisabledItem(act.Title)
 	case act.Checked != nil:
-		check(m, act.Title, act.IsChecked(), act.Run)
+		check(m, act.Title, act.IsChecked, act.Run)
 	default:
 		m.Item(act.Title, act.Run)
 	}
@@ -72,7 +73,7 @@ func (u *ui) contextMenu() *menu.Menu {
 	st := &a.player.State
 	m := newMenu()
 	if st.Idle {
-		u.items(m, "open", "open_folder", "open_url", "paste")
+		u.items(m, "open", "open_folder", "open_url", "network_media", "paste")
 		m.SubMenu("Open Recent", u.recentMenu())
 		m.Separator()
 		u.items(m, "settings", "shortcuts", "palette", "-", "about", "quit")
@@ -93,7 +94,7 @@ func (u *ui) contextMenu() *menu.Menu {
 
 func (u *ui) openMenu() *menu.Menu {
 	m := newMenu()
-	u.items(m, "open", "open_folder", "open_url", "paste", "-", "add_files", "load_subtitle", "load_audio")
+	u.items(m, "open", "open_folder", "open_url", "network_media", "paste", "-", "add_files", "load_subtitle", "load_audio")
 	m.Separator()
 	m.SubMenu("Recent", u.recentMenu())
 	u.items(m, "-", "reveal", "copy_path", "close_media")
@@ -144,21 +145,21 @@ func (u *ui) chapterMenu() *menu.Menu {
 		if title == "" {
 			title = fmt.Sprintf("Chapter %d", i+1)
 		}
-		check(m, player.FormatTime(c.Time)+"   "+ellipsize(title, 40), i == st.Chapter, func() { a.player.SetChapter(i) })
+		radio(m, player.FormatTime(c.Time)+"   "+ellipsize(title, 40), func() bool { return i == st.Chapter }, func() { a.player.SetChapter(i) })
 	}
 	return m
 }
 
 func (u *ui) speedMenu() *menu.Menu {
 	a := u.a
-	cur := a.player.State.Speed
+	st := &a.player.State
 	m := newMenu()
 	for _, s := range speedSteps {
 		label := speedLabel(s)
 		if s == 1 {
 			label = "Normal"
 		}
-		check(m, label, math.Abs(s-cur) < 1e-6, func() { a.setSpeed(s) })
+		radio(m, label, func() bool { return math.Abs(s-st.Speed) < 1e-6 }, func() { a.setSpeed(s) })
 	}
 	return m
 }
@@ -168,9 +169,14 @@ func (u *ui) trackMenu(m *menu.Menu, k player.TrackKind) {
 	a := u.a
 	st := &a.player.State
 	tracks := st.TracksOf(k)
-	sel, hasSel := st.SelectedTrack(k)
+	selected := func(id int) func() bool {
+		return func() bool {
+			sel, ok := st.SelectedTrack(k)
+			return ok == (id != 0) && (!ok || sel.ID == id)
+		}
+	}
 	if k == player.Subtitle {
-		check(m, "Off", !hasSel, func() { a.player.SelectTrack(k, 0) })
+		radio(m, "Off", selected(0), func() { a.player.SelectTrack(k, 0) })
 	}
 	if len(tracks) == 0 && k != player.Subtitle {
 		m.DisabledItem("No tracks")
@@ -178,7 +184,7 @@ func (u *ui) trackMenu(m *menu.Menu, k player.TrackKind) {
 	}
 	for _, t := range tracks {
 		id := t.ID
-		check(m, ellipsize(t.Name(), 52), hasSel && t.ID == sel.ID, func() { a.player.SelectTrack(k, id) })
+		radio(m, ellipsize(t.Name(), 52), selected(id), func() { a.player.SelectTrack(k, id) })
 	}
 }
 
@@ -189,11 +195,16 @@ func (u *ui) subtitleMenu() *menu.Menu {
 	u.trackMenu(m, player.Subtitle)
 	if subs := st.TracksOf(player.Subtitle); len(subs) > 1 {
 		sec := newMenu()
-		cur, has := st.SecondarySubtitle()
-		check(sec, "Off", !has, func() { a.player.SelectSecondarySubtitle(0) })
+		second := func(id int) func() bool {
+			return func() bool {
+				cur, ok := st.SecondarySubtitle()
+				return ok == (id != 0) && (!ok || cur.ID == id)
+			}
+		}
+		radio(sec, "Off", second(0), func() { a.player.SelectSecondarySubtitle(0) })
 		for _, t := range subs {
 			id := t.ID
-			check(sec, ellipsize(t.Name(), 52), has && t.ID == cur.ID, func() { a.player.SelectSecondarySubtitle(id) })
+			radio(sec, ellipsize(t.Name(), 52), second(id), func() { a.player.SelectSecondarySubtitle(id) })
 		}
 		m.Separator()
 		m.SubMenu("Second Subtitle", sec)
@@ -223,11 +234,11 @@ func (u *ui) audioMenu() *menu.Menu {
 	d := settings.Lookup("equalizer")
 	for _, o := range d.Options {
 		v := o.Value
-		check(eq, o.Label, a.settings.Get("equalizer") == v, func() { a.setSetting("equalizer", v) })
+		radio(eq, o.Label, func() bool { return a.settings.Get("equalizer") == v }, func() { a.setSetting("equalizer", v) })
 	}
 	m.SubMenu("Equalizer", eq)
-	check(m, "Even Out Loudness", a.settings.Bool("normalize"), func() { a.toggleSetting("normalize", "Even out loudness") })
-	check(m, "Night Mode", a.settings.Bool("night_mode"), func() { a.toggleSetting("night_mode", "Night mode") })
+	check(m, "Even Out Loudness", func() bool { return a.settings.Bool("normalize") }, func() { a.toggleSetting("normalize", "Even out loudness") })
+	check(m, "Night Mode", func() bool { return a.settings.Bool("night_mode") }, func() { a.toggleSetting("night_mode", "Night mode") })
 	m.Separator()
 	m.Item("Audio Settings…", func() { u.showSettings("Audio") })
 	return m
@@ -245,23 +256,26 @@ func (u *ui) videoMenu() *menu.Menu {
 	fit := newMenu()
 	for _, o := range settings.Lookup("fit").Options {
 		v := o.Value
-		check(fit, o.Label, a.settings.Get("fit") == v, func() { a.setSetting("fit", v) })
+		radio(fit, o.Label, func() bool { return a.settings.Get("fit") == v }, func() { a.setSetting("fit", v) })
 	}
 	m.SubMenu("Picture Size", fit)
 	aspect := newMenu()
-	cur, _ := a.player.Get("video-aspect-override")
+	aspectOn := func(v string) func() bool {
+		return func() bool {
+			cur, _ := a.player.Get("video-aspect-override")
+			return (v == "" && (cur == "no" || cur == "-1" || cur == "")) || aspectMatches(cur, v)
+		}
+	}
 	for _, r := range []struct{ label, value string }{
 		{"Original", ""}, {"16:9", "16:9"}, {"4:3", "4:3"}, {"21:9", "2.35:1"}, {"1.85:1", "1.85:1"}, {"1:1", "1:1"},
 	} {
 		v := r.value
-		on := (v == "" && (cur == "no" || cur == "-1" || cur == "")) || aspectMatches(cur, v)
-		check(aspect, r.label, on, func() { a.player.SetAspect(v) })
+		radio(aspect, r.label, aspectOn(v), func() { a.player.SetAspect(v) })
 	}
 	m.SubMenu("Aspect Ratio", aspect)
 	u.items(m, "-", "zoom_in", "zoom_out", "zoom_reset", "rotate")
-	flipH, flipV := u.flipH, u.flipV
-	check(m, "Mirror", flipH, func() { u.flipH = !u.flipH; a.player.SetFlip(u.flipH, u.flipV) })
-	check(m, "Flip Upside Down", flipV, func() { u.flipV = !u.flipV; a.player.SetFlip(u.flipH, u.flipV) })
+	check(m, "Mirror", func() bool { return u.flipH }, func() { u.flipH = !u.flipH; a.player.SetFlip(u.flipH, u.flipV) })
+	check(m, "Flip Upside Down", func() bool { return u.flipV }, func() { u.flipV = !u.flipV; a.player.SetFlip(u.flipH, u.flipV) })
 	u.items(m, "-", "deinterlace", "-", "screenshot", "screenshot_clean", "-", "info")
 	m.Separator()
 	m.Item("Video Settings…", func() { u.showSettings("Video") })
@@ -291,7 +305,7 @@ func (u *ui) stereoMenu() *menu.Menu {
 	a := u.a
 	s := &a.stereo
 	m := newMenu()
-	check(m, "Normal (2D)", s.layout == player.Layout2D && s.projection == player.ProjectionFlat, func() {
+	radio(m, "Normal (2D)", func() bool { return s.layout == player.Layout2D && s.projection == player.ProjectionFlat }, func() {
 		a.setProjection(player.ProjectionFlat, "")
 		a.setStereoLayout(player.Layout2D)
 	})
@@ -309,14 +323,14 @@ func (u *ui) stereoMenu() *menu.Menu {
 		{"Top and bottom, right eye first", player.LayoutTBHalfRight},
 	} {
 		l := l
-		check(in, l.label, s.layout == l.layout, func() { a.setStereoLayout(l.layout) })
+		radio(in, l.label, func() bool { return s.layout == l.layout }, func() { a.setStereoLayout(l.layout) })
 	}
 	m.SubMenu("3D Video Format", in)
 
 	out := newMenu()
 	for _, o := range settings.StereoViews {
 		v := player.StereoView(o.Value)
-		check(out, o.Label, s.layout != player.Layout2D && s.view == v, func() { a.setStereoView(v) })
+		radio(out, o.Label, func() bool { return s.layout != player.Layout2D && s.view == v }, func() { a.setStereoView(v) })
 	}
 	m.SubMenu("Show 3D As", out)
 	m.Separator()
@@ -336,7 +350,7 @@ func (u *ui) stereoMenu() *menu.Menu {
 		{"YouTube cubemap (EAC)", player.ProjectionEAC, player.VRMono},
 	} {
 		p := p
-		check(vr, p.label, s.projection == p.proj && s.vrStereo == p.stereo, func() { a.setProjection(p.proj, p.stereo) })
+		radio(vr, p.label, func() bool { return s.projection == p.proj && s.vrStereo == p.stereo }, func() { a.setProjection(p.proj, p.stereo) })
 	}
 	m.SubMenu("360° and VR", vr)
 	u.items(m, "vr_reset")

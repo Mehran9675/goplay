@@ -7,7 +7,9 @@ import (
 	"gioui.org/font"
 	"gioui.org/font/gofont"
 	"gioui.org/font/opentype"
+	"github.com/mehran9675/giode/elements"
 	"github.com/mehran9675/giode/fonts"
+	"github.com/mehran9675/giode/styles"
 	"github.com/mehran9675/giode/styles/properties"
 )
 
@@ -42,6 +44,27 @@ const (
 	playIconSize = 26
 	radius       = 10
 )
+
+// scrollGap is the room in dp between scrolling content and its scroll
+// bar.
+const scrollGap = 14
+
+// scrollBar is the scroll bars' look: thin and quiet, there when needed.
+func scrollBar() properties.ScrollBar {
+	return properties.ScrollBar{Width: 5, MinThumbLength: 32, ThumbColor: "#ffffff30", TrackColor: "#ffffff08"}
+}
+
+// listStyles are a list's styles with goplay's scroll bar.
+func listStyles() styles.Styles {
+	return styles.Styles{BorderColor: colBorder, ScrollBar: scrollBar()}
+}
+
+// gapped keeps a list's rows clear of its scroll bar.
+func gapped(row func(i int) elements.Element) func(i int) elements.Element {
+	return func(i int) elements.Element {
+		return elements.Box(styles.Styles{Width: -1, Padding: properties.Inset{Right: scrollGap}}, row(i))
+	}
+}
 
 // setupTheme installs the palette Giode components draw with, and the
 // platform's own UI font.

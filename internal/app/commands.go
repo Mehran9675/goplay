@@ -33,6 +33,7 @@ func (a *App) registerCommands() {
 		act("open", "Open File…", "File", k("Mod+O"), a.openFileDialog),
 		act("open_folder", "Open Folder…", "File", k("Mod+Shift+O"), a.openFolderDialog),
 		act("open_url", "Open URL…", "File", k("Mod+U"), func() { a.ui.showOpenURL() }),
+		act("network_media", "Media on Your Network…", "File", nil, func() { a.ui.dialogs.net.show() }),
 		act("paste", "Open Link or File from Clipboard", "File", k("Mod+V"), a.openClipboard),
 		act("add_files", "Add Files to Playlist…", "File", nil, a.addFilesDialog),
 		when(act("load_subtitle", "Load Subtitle File…", "File", nil, a.loadSubtitleDialog), hasMedia),

@@ -37,7 +37,7 @@ type videoArea struct {
 	vrDrag   gesture.Drag
 	vrLast   f32.Point
 
-	openBtn, urlBtn, folderBtn *button.Button
+	openBtn, urlBtn, folderBtn, netBtn *button.Button
 }
 
 func newVideoArea(u *ui) *videoArea {
@@ -80,6 +80,7 @@ func newVideoArea(u *ui) *videoArea {
 	v.openBtn = button.New("Open File", primary).Icon(ic("file", 18, colOnLight)).OnClick(a.openFileDialog)
 	v.urlBtn = button.New("Open URL", secondary).Icon(ic("link", 18, colText)).OnClick(u.showOpenURL)
 	v.folderBtn = button.New("Open Folder", secondary).Icon(ic("folder", 18, colText)).OnClick(a.openFolderDialog)
+	v.netBtn = button.New("Network", secondary).Icon(ic("tv", 18, colText)).OnClick(func() { u.dialogs.net.show() })
 	return v
 }
 
@@ -263,7 +264,7 @@ func (v *videoArea) welcome() elements.Element {
 	head := elements.Box(styles.Styles{FlexDirection: properties.FlexDirectionColumn, Align: properties.AlignCenter, Gap: 10},
 		ic("logo", 56, colHighlight),
 		elements.Text("Drop a video here, or", styles.Styles{Color: colMuted, FontSize: 15}),
-		elements.Row(styles.Styles{Gap: 10, Wrap: properties.WrapNoWrap, Margin: properties.Inset{Top: 6}}, v.openBtn, v.urlBtn, v.folderBtn),
+		elements.Row(styles.Styles{Gap: 10, Wrap: properties.WrapNoWrap, Margin: properties.Inset{Top: 6}}, v.openBtn, v.urlBtn, v.folderBtn, v.netBtn),
 	)
 	col := []elements.Element{head}
 	if recent := a.history.Items(); len(recent) > 0 {

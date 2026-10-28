@@ -466,7 +466,7 @@ func (a *App) afterPlayerChange() {
 	}
 	if title != a.title {
 		a.title = title
-		a.g.Window().Option(gioapp.Title(title))
+		a.g.SetTitle(title)
 	}
 	if !st.Idle && st.Path != "" {
 		a.lastPath, a.lastTitle = st.Path, st.Title

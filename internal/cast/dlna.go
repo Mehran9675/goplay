@@ -29,6 +29,17 @@ const (
 )
 
 func discoverDLNA(ctx context.Context, report func(Device)) {
+	ssdpSearch(ctx, rendererType, func(loc string) {
+		if d, err := describeRenderer(ctx, loc); err == nil {
+			report(d)
+		}
+	})
+}
+
+// ssdpSearch asks the network for UPnP devices of type st every few
+// seconds until ctx ends, calling found on its own goroutine with each
+// new device's description URL.
+func ssdpSearch(ctx context.Context, st string, found func(location string)) {
 	conn, err := net.ListenPacket("udp4", ":0")
 	if err != nil {
 		return
@@ -39,7 +50,7 @@ func discoverDLNA(ctx context.Context, report func(Device)) {
 		conn.Close()
 	}()
 	dst, _ := net.ResolveUDPAddr("udp4", ssdpAddr)
-	search := []byte("M-SEARCH * HTTP/1.1\r\nHOST: " + ssdpAddr + "\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\nST: " + rendererType + "\r\n\r\n")
+	search := []byte("M-SEARCH * HTTP/1.1\r\nHOST: " + ssdpAddr + "\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\nST: " + st + "\r\n\r\n")
 	go func() {
 		t := time.NewTicker(4 * time.Second)
 		defer t.Stop()
@@ -74,13 +85,38 @@ func discoverDLNA(ctx context.Context, report func(Device)) {
 		if dup {
 			continue
 		}
-		go func() {
-			d, err := describeRenderer(ctx, loc)
-			if err == nil {
-				report(d)
-			}
-		}()
+		go found(loc)
 	}
+}
+
+// describe fetches a UPnP device's description and the base its
+// relative URLs resolve against.
+func describe(ctx context.Context, location string) (*upnpDescription, *url.URL, error) {
+	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, location, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+	var desc upnpDescription
+	if err := xml.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&desc); err != nil {
+		return nil, nil, err
+	}
+	base, err := url.Parse(location)
+	if err != nil {
+		return nil, nil, err
+	}
+	if desc.URLBase != "" {
+		if b, err := url.Parse(desc.URLBase); err == nil {
+			base = b
+		}
+	}
+	return &desc, base, nil
 }
 
 type upnpDescription struct {
@@ -100,29 +136,9 @@ type upnpDescription struct {
 // describeRenderer fetches a renderer's description and finds its
 // control URLs.
 func describeRenderer(ctx context.Context, location string) (*DLNARenderer, error) {
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, location, nil)
+	desc, base, err := describe(ctx, location)
 	if err != nil {
 		return nil, err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var desc upnpDescription
-	if err := xml.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&desc); err != nil {
-		return nil, err
-	}
-	base, err := url.Parse(location)
-	if err != nil {
-		return nil, err
-	}
-	if desc.URLBase != "" {
-		if b, err := url.Parse(desc.URLBase); err == nil {
-			base = b
-		}
 	}
 	r := &DLNARenderer{
 		name:  desc.Device.FriendlyName,
@@ -281,8 +297,14 @@ func (d *DLNARenderer) Status(ctx context.Context) (Status, error) {
 
 func (d *DLNARenderer) Close() error { return nil }
 
-// soap calls action on a UPnP service and returns the response body.
+// soap calls action on one of the renderer's services.
 func (d *DLNARenderer) soap(ctx context.Context, controlURL, service, action, args string) (string, error) {
+	return soapCall(ctx, d.name, controlURL, service, action, args)
+}
+
+// soapCall calls action on the UPnP service at controlURL of the device
+// called name, and returns the response body.
+func soapCall(ctx context.Context, name, controlURL, service, action, args string) (string, error) {
 	body := `<?xml version="1.0" encoding="utf-8"?>` +
 		`<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">` +
 		`<s:Body><u:` + action + ` xmlns:u="` + service + `">` + args + `</u:` + action + `></s:Body></s:Envelope>`
@@ -296,7 +318,7 @@ func (d *DLNARenderer) soap(ctx context.Context, controlURL, service, action, ar
 	req.Header.Set("SOAPACTION", `"`+service+"#"+action+`"`)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("cast: %s: %w", d.name, err)
+		return "", fmt.Errorf("cast: %s: %w", name, err)
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -305,7 +327,7 @@ func (d *DLNARenderer) soap(ctx context.Context, controlURL, service, action, ar
 		if msg == "" {
 			msg = resp.Status
 		}
-		return "", fmt.Errorf("cast: %s refused %s: %s", d.name, action, msg)
+		return "", fmt.Errorf("cast: %s refused %s: %s", name, action, msg)
 	}
 	return string(data), nil
 }
