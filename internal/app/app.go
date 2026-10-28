@@ -71,11 +71,9 @@ type App struct {
 	// dirty asks for another frame once this one is done.
 	dirty bool
 
-	// The window: its title as last set, its size in pixels, and whether
-	// it stays on top.
+	// The window: its title as last set and its size in pixels.
 	title   string
 	winSize image.Point
-	onTop   bool
 
 	// starting runs once the video output is ready (or failed): the files
 	// and commands from the command line. mpv turns video off for a file
@@ -115,7 +113,6 @@ func New(files, commands []string, icon []byte) (*App, error) {
 		a.configDir = dir
 	}
 	a.loadPrefs()
-	a.onTop = a.settings.Bool(settings.KeyAlwaysOnTop)
 
 	a.g = giode.New(giode.Config{
 		Title:       "goplay",
@@ -124,14 +121,17 @@ func New(files, commands []string, icon []byte) (*App, error) {
 		Resizable:   true,
 		Frameless:   true,
 		Center:      true,
-		AlwaysOnTop: a.onTop,
+		AlwaysOnTop: a.settings.Bool(settings.KeyAlwaysOnTop),
 		Background:  colBackground,
 		Icon:        icon,
 		Renderer:    giode.RendererOpenGL,
 		Underlay:    a.drawVideo,
-		OnEvent:     a.windowEvent,
-		OnFileDrop:  a.dropped,
-		OnOpenURL:   a.openedURL,
+		// mpv's render context must be freed while the GL context is
+		// current.
+		UnderlayRelease: a.releaseVideo,
+		OnEvent:         a.windowEvent,
+		OnFileDrop:      a.dropped,
+		OnOpenURL:       a.openedURL,
 		OnContextAction: func(_ string, paths []string) {
 			a.whenReady(func() { a.openItems(paths, false) })
 		},
@@ -301,7 +301,7 @@ func (a *App) drawVideo(t giode.GPUTarget) {
 		if a.rendFailed {
 			return
 		}
-		rend, err := a.player.Handle().NewRenderContext(mpv.GLProcAddress)
+		rend, err := a.player.Handle().NewRenderContext(t.GetProcAddress)
 		if err != nil {
 			a.rendFailed = true
 			a.appendLog("error", "render", err.Error())
@@ -322,6 +322,16 @@ func (a *App) drawVideo(t giode.GPUTarget) {
 	// GL's origin is the bottom left, the window's the top left.
 	if err := a.rend.Render(int(t.Framebuffer), t.Size.X, t.Size.Y, true); err != nil {
 		a.appendLog("error", "render", err.Error())
+	}
+}
+
+// releaseVideo frees mpv's render context on the render thread, before
+// the window's GL context goes away. If the context comes back,
+// drawVideo makes a new one.
+func (a *App) releaseVideo() {
+	if a.rend != nil {
+		a.rend.Free()
+		a.rend = nil
 	}
 }
 
@@ -456,7 +466,7 @@ func (a *App) afterPlayerChange() {
 	}
 	if title != a.title {
 		a.title = title
-		a.g.Window().Option(gioapp.Title(title))
+		a.g.SetTitle(title)
 	}
 	if !st.Idle && st.Path != "" {
 		a.lastPath, a.lastTitle = st.Path, st.Title

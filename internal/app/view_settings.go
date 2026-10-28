@@ -56,8 +56,8 @@ func newPrefsView(u *ui) *prefsView {
 		d := &settings.Defs[i]
 		p.controls[d.Key] = p.newControl(d, d.Options)
 	}
-	p.scroll = scroll.New(p.pageContent, styles.Styles{Width: -1, Height: -1})
-	p.keys = scroll.New(p.shortcutsContent, styles.Styles{Width: -1, Height: -1})
+	p.scroll = scroll.New(func() elements.Element { return clearOfBar(p.pageContent()) }, scrollStyles())
+	p.keys = scroll.New(func() elements.Element { return clearOfBar(p.shortcutsContent()) }, scrollStyles())
 	p.done = primaryButton("Done", func() { u.dialogs.settingsOpen = false })
 	p.reset = secondaryButton("Reset All", func() {
 		a.settings.Reset()
@@ -409,4 +409,14 @@ func (a *App) audioDevices() []settings.Option {
 		out = append(out, settings.Option{Label: label, Value: d.Name})
 	}
 	return out
+}
+
+// scrollStyles fill the settings page and use goplay's scroll bar.
+func scrollStyles() styles.Styles {
+	return styles.Styles{Width: -1, Height: -1, ScrollBar: scrollBar()}
+}
+
+// clearOfBar keeps a scrolling page's content clear of its scroll bar.
+func clearOfBar(el elements.Element) elements.Element {
+	return elements.Box(styles.Styles{Width: -1, Padding: properties.Inset{Right: scrollGap}}, el)
 }

@@ -6,130 +6,86 @@ goplay needs, goplay doesn't work around it; this file describes what's
 missing. Things only a video player would ever need are in goplay itself and
 listed at the end.
 
-Everything the previous version of this file asked for has landed: the
-underlay, `ui.Frame` and the `host` package, the menu and tooltip fixes, menu
-shortcuts and check items, native library bundling, file types, context
-actions, cgo on Windows and CI setup hooks. goplay now uses them, and its own
-GLFW host and packaging scripts are gone.
+Everything the previous version of this file asked for has landed, and goplay
+uses it: file drops everywhere with a drop highlight, window placement and the
+screen's size, minimized windows on Windows, `SetAlwaysOnTop`, `SetTitle`, the
+underlay's `GetProcAddress` and `UnderlayRelease`, the MCP screenshot with
+video and the pointer, key and file-drag tools, and in the CLI Windows DLL
+imports, ANGLE from MSYS2 or VS Code, rebuilds, `{version}` in ldflags and
+package names with the CPU.
 
 ## Giode
 
-### 1. File drop on macOS and Linux
+### 1. Menus with submenus (`components/menu`)
 
-`Config.OnFileDrop` only works on Windows. Dropping videos, folders and
-subtitle files onto the player is how many people open them, especially on
-macOS, goplay's main platform. With the GLFW host it worked everywhere; now it
-works only on Windows.
+All four were reported by a user of goplay's context menu.
 
-- **macOS**: register the window's view for `NSPasteboardTypeFileURL`
-  (`registerForDraggedTypes:`) and deliver `performDragOperation:`'s URLs.
-- **Linux**: Gio's event loop consumes the X11 (XDND) and Wayland
-  (`wl_data_device`) drag-and-drop messages, so this needs Gio changes.
+- **A click in a submenu leaves the menu open.** `menuRow.Layout` closes
+  `r.menu`, which for a submenu item is the submenu, not the menu it came
+  from. Choosing "Open → Open File…" or "Audio → Audio Settings…" runs the
+  action and leaves the context menu on screen. **Fix:** give a submenu its
+  parent and close the root menu (`menuItemActor.Click` needs the same).
+- **Submenus stay open.** `openSubmenu` changes only when another row with a
+  submenu is hovered, so after "Audio" opens, hovering "Playlist" or "Stop"
+  in the parent leaves the Audio submenu up. **Fix:** hovering any other
+  row of the parent closes the open submenu (after a short delay, about
+  300 ms, so a diagonal move into the submenu doesn't close it), as on
+  Windows and macOS.
+- **A right-click outside doesn't close the menu.** The scrim takes only
+  primary clicks; a secondary click goes through to what's under it, so
+  right-clicking elsewhere on goplay's video opens a second context menu at
+  the new place instead of just closing the first. **Fix:** a press of any
+  button outside the menu closes it and is consumed.
+- **A submenu's shadow falls on its parent.** The submenu is drawn above
+  the parent panel, so the side of its shadow next to the parent darkens
+  the parent's rows. **Fix:** draw a parent panel above its submenus (its
+  shadow then falls on the submenu instead, and the submenu's is hidden
+  under the parent), or leave the shadow out on the parent's side.
 
-Drag enter/leave events, for highlighting a drop target, would help too.
+goplay's menu rows now use `CheckItem` and `RadioItem`, so a check mark
+moves as soon as a track or setting changes.
 
-### 2. Window position and the screen's size
+### 2. Fullscreen on Windows leaves the taskbar on top
 
-Picture in picture shrinks the window and keeps it on top, but can't move it
-to a corner of the screen: giode.App can't place a window or report the
-screen's work area. "Resize the window to fit each video" can't cap the size
-at the screen's either, so goplay uses a fixed 1280×800 dp limit.
+Gio's Windows backend makes a window fullscreen by removing its frame and
+showing it maximized (`SW_SHOWMAXIMIZED` in `os_windows.go`). goplay's
+fullscreen window has style `0x17000000`: `WS_MAXIMIZE`, no `WS_POPUP`. It
+covers the whole monitor (0,0 2560×1440 on a 2560×1440 screen) and is the
+foreground window, yet Windows treats it as maximized and draws the taskbar
+over the bottom of the video.
 
-**Suggested:** `App.SetPosition(x, y)` (or `MoveTo(corner, margin)`), and
-`App.Screen()` returning the current monitor's bounds and work area in dp.
+**Fix (the CLI's Gio patches):** for `Fullscreen`, set `WS_POPUP` (without
+`WS_MAXIMIZE`), `SetWindowPos` to the monitor's full rectangle with
+`HWND_TOP`, and `SW_SHOWNORMAL`; restore the saved style and placement when
+leaving it.
 
-### 3. Minimized windows on Windows
+### 3. Text looks rough at UI sizes
 
-Gio's Windows backend never reports `app.Minimized` in a `ConfigEvent`, so
-`OnWindowStateChange` never sees `WindowMinimized` there. `OnBackground`,
-documented as running "on desktops when the window is minimized", doesn't run
-on desktop at all (only Android and iOS call it). goplay's "Pause when
-minimized" uses `OnWindowStateChange` and works only where Gio reports the
-state.
+UI text (11–15 dp, Segoe UI on Windows) is drawn with grayscale coverage
+only, without hinting, so at 100% scaling it looks soft and uneven next to
+the system's ClearType text. A user asked for "edge smoothing". Possible
+improvements, best first: gamma-correct coverage for text (light text on
+dark backgrounds looks thin and ragged without it), hinting or snapping
+stems to pixels at small sizes, and subpixel (LCD) antialiasing on Windows.
 
-**Suggested:** report `Minimized` from `WM_SIZE`/`SIZE_MINIMIZED` (and restore
-on `SIZE_RESTORED`) in the patched Gio, and call `OnBackground`/`OnForeground`
-from window state on desktops as the doc says.
+### 4. Scroll bars
 
-### 4. Always on top at run time
+goplay's lists and settings pages scroll with Giode's scroll bar, styled
+through `ScrollBar`. Users found it too visible and too close to the content:
 
-`Config.AlwaysOnTop` only applies at startup. goplay toggles it with
-`App.Window().Option(app.TopMost(on))`, which works but goes around giode.App.
-`App.SetAlwaysOnTop(bool)` and `App.AlwaysOnTop()` would match `SetFullscreen`
-and keep giode's own state right.
-
-### 5. The underlay's GL context
-
-- **Function lookup.** OpenGL engines in `Config.Underlay` need the context's
-  `GetProcAddress` (libmpv's render API asks for one). goplay resolves it
-  itself (`internal/mpv/glproc.go`: ANGLE's `eglGetProcAddress` on Windows,
-  EGL on Linux, `dlsym` on macOS), which every OpenGL engine would repeat.
-  `GPUTarget` could carry a `GetProcAddress func(name string) unsafe.Pointer`.
-- **Teardown.** An engine's GL resources must be freed on the render thread
-  with the context current, before the window's context goes away
-  (`mpv_render_context_free` must also run before the mpv core is
-  destroyed). There's no callback for that, so goplay lets the process exit
-  with mpv alive. **Suggested:** `Config.UnderlayRelease func()`, called on
-  the render thread before the context is destroyed.
-
-### 6. MCP
-
-goplay is tested with giode's MCP server, which found several of the problems
-above, but:
-
-- **`screenshot` is blank** (white) with `Underlay` and `RendererOpenGL`. It
-  should read the window's framebuffer after the frame, video included.
-- **No pointer or keyboard tools** besides clicks: hover (tooltips, a seek
-  bar's preview, a control bar that shows on hover), drag (sliders, seek
-  bars), right-click (context menus) and key presses (shortcuts) can't be
-  tested. Windows messages posted to the window don't reach Gio either,
-  since it reads pointer input. A `ui_pointer` tool (move, press and release
-  with a button, at a node or at coordinates) and `ui_key` (a key with
-  modifiers) would cover them.
+- `TrackColor` with zero alpha falls back to the default track, so a bar
+  can't be thumb-only; goplay uses an almost invisible track.
+- There's no inset: the bar sits on the viewport's right edge. goplay pads
+  its rows to keep them clear of it, but the bar itself can't be moved in
+  from the edge. A `ScrollBar.Inset` (dp from the edge, and from top and
+  bottom) would do it.
+- An overlay style that shows the bar while scrolling or hovered and fades
+  it out after (as macOS, Windows 11 and browsers do) would suit a media
+  player best.
 
 ## Giode CLI
 
-### 1. Windows DLL imports are never found (bug)
-
-`native.Collect` reads a Windows binary's imports with Go's
-`(*pe.File).ImportedLibraries`, which Go's standard library has never
-implemented: it always returns nil. So no imported DLL is bundled, and no
-missing one is warned about. goplay's exe imports `libmpv-2.dll`, and nothing
-bundled it.
-
-**Fix:** collect the DLL names from `(*pe.File).ImportedSymbols()`, whose
-entries are `symbol:dll`, or read the import directory. Until then goplay
-lists its DLLs in `[native.windows] libraries`, which only works because the
-libmpv it uses (shinchiro's build) is a single self-contained DLL. MSYS2's
-libmpv, with dozens of dependencies, can't be bundled.
-
-### 2. Paths in giode.toml
-
-`[native.windows] libraries` and `search` take fixed paths. ANGLE lives in a
-different place on every machine (an Edge, Chrome or VS Code install, MSYS2's
-`angleproject`), so goplay's build scripts copy it to `build/native` first.
-Environment variables (`$MSYSTEM_PREFIX/bin/libEGL.dll`) or globs in these
-paths would remove that step. With `renderer = "opengl"` the CLI could also
-find and bundle ANGLE itself, since `RendererOpenGL` requires it on Windows.
-
-### 3. The version in ldflags
-
-`$GIODE_VERSION` sets `app.version`, but `app.ldflags` can't refer to it, so
-an app's own version string (goplay's About box) doesn't follow the release
-tag. goplay's CI rewrites both (`scripts/ci-version.sh`). A `{version}`
-placeholder in `app.ldflags`, or the CLI setting a variable the app can read
-(`-X github.com/mehran9675/giode.AppVersion=...`), would fix it.
-
-### 4. CI for ARM and file names per CPU
-
-`giode ci` builds x64 only, in MSYS2's MINGW64. goplay's releases also have
-Linux and Windows ARM64 builds (GitHub's `ubuntu-24.04-arm` and
-`windows-11-arm` runners, MSYS2's CLANGARM64), so goplay keeps its own
-workflow. Also, `dmg` and `windows-installer` name their output without the
-CPU (`goplay-1.1.0.dmg`, `goplay-1.1.0-setup.exe`), so two builds of one
-release collide; goplay's CI renames them (`scripts/ci-collect.sh`).
-**Suggested:** an `arch` list in `[ci]`, and the CPU in every package's name
-(the `.deb`, `.rpm` and AppImage already have it).
+Nothing outstanding.
 
 ## In goplay itself (player-specific)
 
@@ -139,6 +95,10 @@ proposed for Giode:
 - the timeline (`internal/app/view_seek.go`): buffered ranges, chapter marks,
   A-B loop, a hover preview of time and chapter, keyframe seeks while dragging
 - 3D and 360° projection, casting (Chromecast, DLNA), the mpv binding
+- browsing DLNA/UPnP media servers (`internal/cast/mediaserver.go`)
+- its release workflow: `giode ci` builds on tag pushes and adds web and
+  Android, while goplay builds when a release is published, runs its tests
+  first, and takes libmpv for Windows from shinchiro's builds
 
 Not Giode or the CLI, but worth knowing: Gio doesn't report media keys
 (play/pause on keyboards and headsets), so goplay can't react to them yet.

@@ -12,6 +12,7 @@ import (
 	"gioui.org/layout"
 	"gioui.org/op/clip"
 
+	"github.com/mehran9675/giode"
 	"github.com/mehran9675/giode/components/button"
 	"github.com/mehran9675/giode/styles/properties"
 
@@ -36,7 +37,7 @@ type videoArea struct {
 	vrDrag   gesture.Drag
 	vrLast   f32.Point
 
-	openBtn, urlBtn, folderBtn *button.Button
+	openBtn, urlBtn, folderBtn, netBtn *button.Button
 }
 
 func newVideoArea(u *ui) *videoArea {
@@ -65,7 +66,7 @@ func newVideoArea(u *ui) *videoArea {
 			}
 		}).
 		OnSecondaryClick(func(e elements.ClickEvent) {
-			u.openMenuAt(u.contextMenu(), u.lastPointer.Round())
+			u.openMenuAt(u.contextMenu(), u.videoRect.Min.Add(e.Position))
 		})
 
 	primary := styles.Styles{
@@ -79,6 +80,7 @@ func newVideoArea(u *ui) *videoArea {
 	v.openBtn = button.New("Open File", primary).Icon(ic("file", 18, colOnLight)).OnClick(a.openFileDialog)
 	v.urlBtn = button.New("Open URL", secondary).Icon(ic("link", 18, colText)).OnClick(u.showOpenURL)
 	v.folderBtn = button.New("Open Folder", secondary).Icon(ic("folder", 18, colText)).OnClick(a.openFolderDialog)
+	v.netBtn = button.New("Network", secondary).Icon(ic("tv", 18, colText)).OnClick(func() { u.dialogs.net.show() })
 	return v
 }
 
@@ -164,6 +166,9 @@ func (v *videoArea) content(elements.PressState) elements.Element {
 			Background: "#000000a0", BorderRadius: 28, Padding: properties.UniformInset(14),
 		}, spinner.Spinner(styles.Styles{Width: 28, Height: 28, Color: colText}))))
 	}
+	if d, ok := a.g.FileDrag(); ok && d.Kind != giode.FileDragLeave {
+		layers = append(layers, v.dropTarget(!st.Idle))
+	}
 	if u.flash != "" {
 		if age := time.Since(u.flashAt); age < flashDuration {
 			f := float32(age) / float32(flashDuration)
@@ -193,6 +198,21 @@ func (v *videoArea) content(elements.PressState) elements.Element {
 func centered(el elements.Element) elements.Element {
 	return elements.Box(styles.Styles{Position: properties.PositionAbsolute, Top: 0, Left: 0, Right: 0, Bottom: 0,
 		Justify: properties.JustifyCenter, Align: properties.AlignCenter, Width: -1, Height: -1}, el)
+}
+
+// dropTarget shows that files dragged over the window can be dropped.
+func (v *videoArea) dropTarget(playing bool) elements.Element {
+	hint := "Drop to play"
+	if playing {
+		hint = "Drop to play, or to add subtitles"
+	}
+	return elements.Box(styles.Styles{Position: properties.PositionAbsolute, Top: 0, Left: 0, Right: 0, Bottom: 0,
+		Padding: properties.UniformInset(12)},
+		elements.Box(styles.Styles{Width: -1, Height: -1, Justify: properties.JustifyCenter, Align: properties.AlignCenter,
+			Background: "#000000a6", BorderRadius: 16, BorderWidth: 2, BorderColor: colHighlight},
+			elements.Box(styles.Styles{FlexDirection: properties.FlexDirectionColumn, Align: properties.AlignCenter, Gap: 12},
+				ic("add", 40, colHighlight),
+				elements.Text(hint, styles.Styles{Color: colText, FontSize: 16, FontWeight: properties.FontWeightMedium}))))
 }
 
 // osd is the transient message at the top of the picture.
@@ -244,7 +264,7 @@ func (v *videoArea) welcome() elements.Element {
 	head := elements.Box(styles.Styles{FlexDirection: properties.FlexDirectionColumn, Align: properties.AlignCenter, Gap: 10},
 		ic("logo", 56, colHighlight),
 		elements.Text("Drop a video here, or", styles.Styles{Color: colMuted, FontSize: 15}),
-		elements.Row(styles.Styles{Gap: 10, Wrap: properties.WrapNoWrap, Margin: properties.Inset{Top: 6}}, v.openBtn, v.urlBtn, v.folderBtn),
+		elements.Row(styles.Styles{Gap: 10, Wrap: properties.WrapNoWrap, Margin: properties.Inset{Top: 6}}, v.openBtn, v.urlBtn, v.folderBtn, v.netBtn),
 	)
 	col := []elements.Element{head}
 	if recent := a.history.Items(); len(recent) > 0 {

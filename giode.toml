@@ -7,9 +7,9 @@
 #   giode build deb             (and linux, rpm, appimage)
 #
 # goplay draws video under its UI with Giode's underlay and OpenGL, and
-# links libmpv with cgo; [native] bundles libmpv and what it loads. The
-# build scripts (build.sh, build.bat) and CI put the ANGLE DLLs Windows
-# needs, and libmpv where it isn't in MSYS2, in build/native first.
+# links libmpv with cgo; [native] bundles libmpv and what it loads. On
+# Windows the CLI bundles ANGLE too (renderer = "opengl"); the build
+# scripts and CI put libmpv in build/native first.
 
 [app]
 name = "goplay"
@@ -22,8 +22,7 @@ publisher = "Mehran Zahiroddini"
 description = "A fast, beautiful video player that plays almost anything."
 website = "https://github.com/Mehran9675/goplay"
 renderer = "opengl"
-# Kept equal to version (CI sets both from the release tag).
-ldflags = "-X github.com/mehran9675/goplay/internal/app.Version=1.1.0"
+ldflags = "-X github.com/mehran9675/goplay/internal/app.Version={version}"
 
 [macos]
 min_os = 11
@@ -52,10 +51,7 @@ license = "MIT"
 bundle = true
 
 [native.windows]
-search = ["build/native", "C:/msys64/ucrt64/bin", "C:/msys64/clangarm64/bin", "C:/msys64/mingw64/bin"]
-# Gio loads ANGLE at run time, so nothing imports it; libmpv is listed
-# because the CLI misses Windows imports (docs/giode-gaps.md).
-libraries = ["build/native/libmpv-2.dll", "build/native/libEGL.dll", "build/native/libGLESv2.dll"]
+search = ["build/native", "$MSYSTEM_PREFIX/bin"]
 
 [native.macos]
 search = ["/opt/homebrew/lib", "/usr/local/lib"]

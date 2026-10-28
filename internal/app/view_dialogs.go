@@ -37,6 +37,8 @@ type dialogs struct {
 	castOpen bool
 	cast     *dialog.Dialog
 
+	net *netMedia
+
 	paletteOpen  bool
 	palette      *dialog.Dialog
 	paletteInput *input.Input
@@ -123,6 +125,8 @@ func newDialogs(u *ui) *dialogs {
 		return column(12, heading("Go to Time"), d.jumpInput, buttonsRow(cancelJump, goBtn))
 	}, dialogStyles(360))
 
+	d.net = newNetMedia(u)
+
 	// Cast.
 	rescan := secondaryButton("Search Again", a.startCastScan)
 	stopCast := secondaryButton("Stop Casting", func() { a.stopCasting(); d.castOpen = false })
@@ -132,7 +136,7 @@ func newDialogs(u *ui) *dialogs {
 	// Command palette.
 	d.paletteInput = input.New("Type a command…", fieldStyles()).
 		Submit(func(string) { d.runMatch(0) })
-	d.paletteList = virtuallist.New(func() int { return len(d.matches) }, 40, d.paletteRow, styles.Styles{BorderColor: colBorder}).
+	d.paletteList = virtuallist.New(func() int { return len(d.matches) }, 40, gapped(d.paletteRow), listStyles()).
 		OnActivate(d.runMatch).ClickFocusesRow(false)
 	d.palette = dialog.New(&d.paletteOpen, func() elements.Element {
 		d.matches = a.actions.Search(d.paletteInput.Text())
@@ -146,12 +150,12 @@ func newDialogs(u *ui) *dialogs {
 	// Log.
 	copyLog := secondaryButton("Copy", func() { a.g.SetClipboard(strings.Join(d.lines, "\n")); a.toast("Log copied") })
 	closeLog := secondaryButton("Close", func() { d.logOpen = false })
-	d.logList = virtuallist.New(func() int { return len(d.lines) }, 20, func(i int) elements.Element {
+	d.logList = virtuallist.New(func() int { return len(d.lines) }, 20, gapped(func(i int) elements.Element {
 		if i >= len(d.lines) {
 			return elements.Box(styles.Styles{})
 		}
 		return elements.Text(d.lines[i], styles.Styles{Color: colMuted, FontSize: 11, MaxLines: 1, TextOverflow: properties.TextOverflowEllipsis})
-	}, styles.Styles{BorderColor: colBorder})
+	}), listStyles())
 	d.log = dialog.New(&d.logOpen, func() elements.Element {
 		d.lines = a.logLines()
 		body := elements.Element(elements.Box(styles.Styles{Width: -1, Height: 420}, d.logList))
@@ -187,18 +191,19 @@ func (d *dialogs) layout(gtx layout.Context) {
 	for _, dl := range []*dialog.Dialog{d.url, d.jump, d.cast, d.palette, d.log, d.about, d.settings} {
 		dl.Layout(gtx)
 	}
+	d.net.layout(gtx)
 	if !d.castOpen && d.u.a.cast.scanning {
 		d.u.a.stopCastScan()
 	}
 }
 
 func (d *dialogs) anyOpen() bool {
-	return d.urlOpen || d.jumpOpen || d.castOpen || d.paletteOpen || d.logOpen || d.aboutOpen || d.settingsOpen
+	return d.urlOpen || d.jumpOpen || d.castOpen || d.net.open || d.paletteOpen || d.logOpen || d.aboutOpen || d.settingsOpen
 }
 
 // closeTop closes the open dialog; false if none was.
 func (d *dialogs) closeTop() bool {
-	for _, f := range []*bool{&d.settingsOpen, &d.paletteOpen, &d.urlOpen, &d.jumpOpen, &d.castOpen, &d.logOpen, &d.aboutOpen} {
+	for _, f := range []*bool{&d.settingsOpen, &d.paletteOpen, &d.urlOpen, &d.jumpOpen, &d.castOpen, &d.net.open, &d.logOpen, &d.aboutOpen} {
 		if *f {
 			if f == &d.settingsOpen && d.prefs.capture != "" {
 				d.prefs.capture = ""

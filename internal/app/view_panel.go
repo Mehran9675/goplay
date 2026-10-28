@@ -37,12 +37,12 @@ func newSidePanel(u *ui) *sidePanel {
 	p.tabs = segmented.New("Playlist", "Chapters").OnChange(func(i int) { u.panelTab = i })
 	p.tabs.Styles(styles.Styles{Width: -1, Background: colSurface2, BorderColor: colSurface3, Color: colText, FontSize: 13})
 	st := &a.player.State
-	p.playlist = virtuallist.New(func() int { return len(st.Playlist) }, 52, p.playlistRow,
-		styles.Styles{BorderColor: colBorder}).
+	p.playlist = virtuallist.New(func() int { return len(st.Playlist) }, 52, gapped(p.playlistRow),
+		listStyles()).
 		OnActivate(func(i int) { a.player.PlaylistPlay(i) }).
 		ClickFocusesRow(false)
-	p.chapters = virtuallist.New(func() int { return len(st.Chapters) }, 44, p.chapterRow,
-		styles.Styles{BorderColor: colBorder}).
+	p.chapters = virtuallist.New(func() int { return len(st.Chapters) }, 44, gapped(p.chapterRow),
+		listStyles()).
 		OnActivate(func(i int) { a.player.SetChapter(i) }).
 		ClickFocusesRow(false)
 	p.close = ghostButton("close", 18, "Close", func() { u.panelOpen = false })

@@ -1,12 +1,13 @@
 # goplay Windows toolchain detection, build and run.
 #
 # Called by build.bat and run.bat; not meant to be run directly. It finds
-# the MinGW-w64 compiler, pkg-config, libmpv and the ANGLE DLLs, stops with
-# an error naming whatever is missing, then builds goplay with the giode
-# CLI into dist\windows, with libmpv and ANGLE next to the exe.
+# the MinGW-w64 compiler, pkg-config and libmpv, stops with an error naming
+# whatever is missing, then builds goplay with the giode CLI into
+# dist\windows, with libmpv next to the exe. The CLI finds and bundles the
+# ANGLE DLLs itself (from MSYS2 or VS Code).
 #
 # Detection order for each dependency: an environment variable override
-# (MINGW, LIBMPV, ANGLE), then PATH, then a search of the usual install
+# (MINGW, LIBMPV), then PATH, then a search of the usual install
 # locations. Set the variable to skip the search, e.g.
 #
 #   set LIBMPV=D:\sdk\libmpv
@@ -181,29 +182,6 @@ if ($libmpv -and $mpvLibDir) {
     }
 }
 
-# --- ANGLE --------------------------------------------------------------
-# Gio and libmpv share an OpenGL ES context through ANGLE. Any recent
-# Chromium-based app ships a usable libEGL.dll + libGLESv2.dll pair.
-Step 'Looking for ANGLE (libEGL.dll, libGLESv2.dll)'
-function Test-Angle([string]$d) { $d -and (Test-Path "$d\libEGL.dll") -and (Test-Path "$d\libGLESv2.dll") }
-$angle = $null
-if ($env:ANGLE) {
-    if (Test-Angle $env:ANGLE) { $angle = $env:ANGLE }
-    else { Fail "ANGLE is set to '$env:ANGLE' but libEGL.dll/libGLESv2.dll are not both there" 'Point ANGLE at a folder with both DLLs, or unset it to search automatically.' }
-}
-else {
-    $angle = Expand-Dirs @("$root\deps\angle", "$env:USERPROFILE\angle", "$env:LOCALAPPDATA\Programs\Microsoft VS Code\*",
-        "$env:LOCALAPPDATA\Programs\Microsoft VS Code", "$env:ProgramFiles\Microsoft VS Code\*", "$env:ProgramFiles\Microsoft VS Code",
-        "$env:ProgramFiles\Google\Chrome\Application\*", "${env:ProgramFiles(x86)}\Google\Chrome\Application\*",
-        "$env:LOCALAPPDATA\Google\Chrome\Application\*", "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\*",
-        "$env:ProgramFiles\Microsoft\Edge\Application\*", "$env:ProgramFiles\BraveSoftware\Brave-Browser\Application\*") |
-        Where-Object { Test-Angle $_ } | Select-Object -First 1
-    if (-not $angle) {
-        Fail 'ANGLE DLLs not found (libEGL.dll + libGLESv2.dll)' 'Install VS Code or Google Chrome (both ship ANGLE), or copy the two DLLs into deps\angle, or set ANGLE.'
-    }
-}
-if ($angle) { Found 'ANGLE' $angle }
-
 # --- Report -------------------------------------------------------------
 if ($script:problems.Count -gt 0) {
     Write-Host ''
@@ -215,7 +193,7 @@ if ($script:problems.Count -gt 0) {
 # --- Build --------------------------------------------------------------
 # MinGW goes first on PATH so its runtime DLLs win over other copies (Git
 # for Windows ships an incompatible libwinpthread-1.dll).
-$env:PATH = "$mingw;$(Split-Path $mpvDll);$angle;$env:PATH"
+$env:PATH = "$mingw;$(Split-Path $mpvDll);$env:PATH"
 $env:PKG_CONFIG = $pkgConfig
 $env:PKG_CONFIG_PATH = $pcDir
 $env:CGO_ENABLED = '1'
@@ -235,13 +213,13 @@ if (-not $giode) {
     exit 1
 }
 
-# giode.toml's [native.windows] bundles libmpv and ANGLE from build\native.
-Step 'Staging libmpv and ANGLE in build\native'
+# giode.toml's [native.windows] search finds libmpv in build\native. ANGLE
+# copies left there by older scripts are removed so the CLI picks its own.
+Step 'Staging libmpv in build\native'
 $native = Join-Path $root 'build\native'
 New-Item -ItemType Directory -Force $native | Out-Null
-foreach ($d in @($mpvDll, "$angle\libEGL.dll", "$angle\libGLESv2.dll")) {
-    Copy-Item -Force $d $native
-}
+Copy-Item -Force $mpvDll $native
+Remove-Item -Force -ErrorAction SilentlyContinue "$native\libEGL.dll", "$native\libGLESv2.dll"
 
 Push-Location $root
 try {
