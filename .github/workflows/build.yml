@@ -1,31 +1,34 @@
 name: Release builds
 
-# Builds goplay for macOS, Linux and Windows when a release is published,
-# and attaches the packages to it. A manual run takes a tag, to build an
-# existing release again.
+# Builds goplay for macOS, Linux and Windows on Intel/AMD and ARM when a
+# release is published, and attaches the packages to it. A manual run
+# with a tag builds that release again; without one it builds the chosen
+# branch and keeps the packages as the run's artifacts.
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to build and attach the packages to
-        required: true
+        description: Release tag to build and attach the packages to (empty to only build the branch)
+        required: false
 
 permissions:
   contents: write
 
 env:
   TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  REF: ${{ github.event.release.tag_name || inputs.tag || github.sha }}
+  VERSION: ${{ github.event.release.tag_name || inputs.tag || 'dev' }}
 
 jobs:
   macos:
-    name: macOS
+    name: macOS (arm64)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ env.REF }}
       # This workflow's own revision, for the packaging scripts: an older
       # release can then be packaged with current tooling.
       - uses: actions/checkout@v4
@@ -48,21 +51,31 @@ jobs:
           go vet ./...
           GOPLAY_TEST_MEDIA="$RUNNER_TEMP/media/chapters.mkv" GOPLAY_TEST_MEDIA_DIR="$RUNNER_TEMP/media" go test ./...
       - name: Package
-        run: .tools/scripts/package.sh "$TAG"
+        run: .tools/scripts/package.sh "$VERSION"
       - name: Attach to the release
+        if: env.TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" dist/*.zip --clobber
+        run: gh release upload "$TAG" dist/*.dmg dist/*.zip --clobber
+      - uses: actions/upload-artifact@v4
+        if: env.TAG == ''
+        with:
+          name: goplay-macos-arm64
+          path: dist/*
 
   linux:
-    name: Linux
-    runs-on: ubuntu-24.04
+    name: Linux (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
-      # This workflow's own revision, for the packaging scripts: an older
-      # release can then be packaged with current tooling.
+          ref: ${{ env.REF }}
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
@@ -73,7 +86,7 @@ jobs:
       - name: Install libmpv, FFmpeg and GLFW's build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libmpv-dev ffmpeg pkg-config \
+          sudo apt-get install -y libmpv-dev ffmpeg pkg-config dpkg-dev \
             libx11-dev libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev
       - name: Test
         run: |
@@ -81,24 +94,37 @@ jobs:
           go vet ./...
           GOPLAY_TEST_MEDIA="$RUNNER_TEMP/media/chapters.mkv" GOPLAY_TEST_MEDIA_DIR="$RUNNER_TEMP/media" go test ./...
       - name: Package
-        run: .tools/scripts/package.sh "$TAG"
+        run: .tools/scripts/package.sh "$VERSION"
       - name: Attach to the release
+        if: env.TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" dist/*.tar.gz --clobber
+        run: gh release upload "$TAG" dist/*.deb dist/*.tar.gz --clobber
+      - uses: actions/upload-artifact@v4
+        if: env.TAG == ''
+        with:
+          name: goplay-linux-${{ matrix.arch }}
+          path: dist/*
 
   windows:
-    name: Windows
-    runs-on: windows-latest
+    name: Windows (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: windows-latest, msystem: UCRT64, pkg: mingw-w64-ucrt-x86_64, cc: gcc }
+          - { arch: arm64, runner: windows-11-arm, msystem: CLANGARM64, pkg: mingw-w64-clang-aarch64, cc: clang }
+    runs-on: ${{ matrix.runner }}
     defaults:
       run:
         shell: msys2 {0}
+    env:
+      CC: ${{ matrix.cc }}
+      CGO_ENABLED: "1"
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
-      # This workflow's own revision, for the packaging scripts: an older
-      # release can then be packaged with current tooling.
+          ref: ${{ env.REF }}
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
@@ -108,26 +134,37 @@ jobs:
           go-version-file: go.mod
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: UCRT64
+          msystem: ${{ matrix.msystem }}
           path-type: inherit
           update: true
           install: >-
             zip
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-pkgconf
-            mingw-w64-ucrt-x86_64-mpv
-            mingw-w64-ucrt-x86_64-ffmpeg
-            mingw-w64-ucrt-x86_64-angleproject
+            ${{ matrix.pkg }}-${{ matrix.cc }}
+            ${{ matrix.pkg }}-pkgconf
+            ${{ matrix.pkg }}-mpv
+            ${{ matrix.pkg }}-ffmpeg
+            ${{ matrix.pkg }}-angleproject
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            Invoke-WebRequest https://jrsoftware.org/download.php/is.exe -OutFile "$env:RUNNER_TEMP\is.exe"
+            Start-Process "$env:RUNNER_TEMP\is.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/ALLUSERS' -Wait
+          }
       - name: Test
-        env:
-          CGO_ENABLED: "1"
         run: |
           .tools/scripts/test-media.sh "$RUNNER_TEMP/media"
           go vet ./...
           GOPLAY_TEST_MEDIA="$RUNNER_TEMP/media/chapters.mkv" GOPLAY_TEST_MEDIA_DIR="$RUNNER_TEMP/media" go test ./...
       - name: Package
-        run: .tools/scripts/package.sh "$TAG"
+        run: .tools/scripts/package.sh "$VERSION"
       - name: Attach to the release
+        if: env.TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" dist/*.zip --clobber
+        run: gh release upload "$TAG" dist/*.exe dist/*.zip --clobber
+      - uses: actions/upload-artifact@v4
+        if: env.TAG == ''
+        with:
+          name: goplay-windows-${{ matrix.arch }}
+          path: dist/*

@@ -145,6 +145,14 @@ A video player must appear in "Open with" for video files:
 A cross-platform `[[file_types]]` list (extensions, MIME types, a name, a role)
 would generate all three.
 
+A context menu entry ("Play with GoPlay") fits next to that, as an
+`[[actions]]` list with a label, the file types and the command line. It
+would make an `NSServices` entry on macOS (the app answers it from its
+services provider), a `shell` verb under `SystemFileAssociations` in the
+Windows installer, and Dolphin and Nemo action files on Linux.
+`scripts/package.sh`, `scripts/goplay.iss` and `scripts/linux/` do this for
+goplay until then.
+
 ### 4. `giode ci` with system packages
 
 The generated workflow builds pure-Go apps. cgo apps need packages installed
