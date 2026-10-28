@@ -150,8 +150,9 @@ jobs:
           # Edge, whose DLLs need nothing else. See giode.toml's
           # [native.windows].
           mkdir -p build/native build/libmpv
-          gh release download -R shinchiro/mpv-winbuild-cmake -p "mpv-dev-${{ matrix.mpv }}-[0-9]*.7z" -D "$RUNNER_TEMP"
-          7z x -y -o"build/libmpv" "$RUNNER_TEMP"/mpv-dev-*.7z >/dev/null
+          tmp="$(cygpath -u "$RUNNER_TEMP")"
+          gh release download -R shinchiro/mpv-winbuild-cmake -p "mpv-dev-${{ matrix.mpv }}-[0-9]*.7z" -D "$tmp"
+          7z x -y -o"build/libmpv" "$tmp"/mpv-dev-*.7z >/dev/null
           cp build/libmpv/libmpv-2.dll build/native/
           prefix="$(cygpath -m "$PWD/build/libmpv")"
           printf 'prefix=%s\nlibdir=${prefix}\nincludedir=${prefix}/include\n\nName: mpv\nDescription: libmpv\nVersion: 0.40.0\nLibs: -L${libdir} -lmpv\nCflags: -I${includedir}\n' "$prefix" > build/libmpv/mpv.pc
