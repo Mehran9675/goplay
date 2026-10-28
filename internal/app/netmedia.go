@@ -11,6 +11,7 @@ import (
 
 	"github.com/mehran9675/giode/components/button"
 	"github.com/mehran9675/giode/components/dialog"
+	"github.com/mehran9675/giode/components/input"
 	"github.com/mehran9675/giode/components/spinner"
 	"github.com/mehran9675/giode/components/virtuallist"
 	"github.com/mehran9675/giode/elements"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/mehran9675/goplay/internal/cast"
 	"github.com/mehran9675/goplay/internal/player"
+	"github.com/mehran9675/goplay/internal/settings"
 )
 
 // netMedia browses the media servers on the network (DLNA/UPnP: a NAS,
@@ -33,6 +35,8 @@ type netMedia struct {
 	scanCancel context.CancelFunc
 	scanning   bool
 	servers    []*cast.MediaServer
+	// silent are the saved addresses where no server answered.
+	silent []string
 
 	// server is the one being browsed, path the folders from its top
 	// down to the one listed, entries that folder's contents.
@@ -44,7 +48,8 @@ type netMedia struct {
 	// gen tells a listing that arrives late from one still wanted.
 	gen int
 
-	back, rescan, playAll, closeBtn *button.Button
+	addrInput                               *input.Input
+	back, rescan, playAll, closeBtn, addBtn *button.Button
 }
 
 type netFolder struct{ id, title string }
@@ -58,6 +63,9 @@ func newNetMedia(u *ui) *netMedia {
 	n.rescan = secondaryButton("Search Again", n.scan)
 	n.playAll = primaryButton("Play All", func() { n.play(0) })
 	n.closeBtn = secondaryButton("Close", func() { n.open = false })
+	n.addrInput = input.New("A server's address, like 192.168.1.20 or 192.168.1.20:8096", fieldStyles()).Keyboard(input.KeyboardURL).
+		Submit(n.addAddress)
+	n.addBtn = secondaryButton("Add", func() { n.addAddress(n.addrInput.Text()) })
 	n.dlg = dialog.New(&n.open, n.content, dialogStyles(600))
 	return n
 }
@@ -89,17 +97,56 @@ func (n *netMedia) scan() {
 	n.scanCancel = cancel
 	n.scanMu.Unlock()
 	n.scanning = true
-	n.servers = nil
+	n.servers, n.silent = nil, nil
 	n.server, n.path, n.entries, n.err = nil, nil, nil, ""
+	addrs := n.addresses()
 	go func() {
-		cast.DiscoverMediaServers(ctx, func(s *cast.MediaServer) {
+		silent := cast.DiscoverMediaServers(ctx, addrs, func(s *cast.MediaServer) {
 			a.Post(func() {
 				n.servers = append(n.servers, s)
 				sortServers(n.servers)
 			})
 		})
-		a.Post(func() { n.scanning = false })
+		a.Post(func() {
+			// A scan stopped early didn't give the addresses their time.
+			if ctx.Err() == context.DeadlineExceeded {
+				n.silent = silent
+			}
+			n.scanning = false
+		})
 	}()
+}
+
+// addresses are the media server addresses saved in Settings.
+func (n *netMedia) addresses() []string {
+	var out []string
+	for _, line := range strings.Split(n.u.a.settings.Get(settings.KeyMediaServers), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+// addAddress saves a media server's address and searches again.
+func (n *netMedia) addAddress(addr string) {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return
+	}
+	addrs := n.addresses()
+	for _, a := range addrs {
+		if strings.EqualFold(a, addr) {
+			n.addrInput.SetText("")
+			n.scan()
+			return
+		}
+	}
+	st := n.u.a.settings
+	st.Set(settings.KeyMediaServers, strings.Join(append(addrs, addr), "\n"))
+	st.Flush()
+	n.addrInput.SetText("")
+	n.scan()
 }
 
 func (n *netMedia) stopScan() {
@@ -250,9 +297,16 @@ func (n *netMedia) serversContent() elements.Element {
 	if n.scanning {
 		rows = append(rows, busy("Looking for media servers…"))
 	} else if len(n.servers) == 0 {
-		rows = append(rows, note("No media servers found. Make sure sharing is on and they're on the same network as this computer."))
+		rows = append(rows, note("No media servers found. Make sure sharing is on and they're on the same network as this computer, "+
+			"or add a server's address below."))
 	}
-	rows = append(rows, buttonsRow(n.rescan, n.closeBtn))
+	for _, addr := range n.silent {
+		rows = append(rows, note("No media server answered at "+addr+". Saved addresses are in Settings › Casting."))
+	}
+	rows = append(rows,
+		elements.Row(styles.Styles{Width: -1, Gap: 8, Align: properties.AlignCenter, Wrap: properties.WrapNoWrap, Margin: properties.Inset{Top: 6}},
+			elements.Box(styles.Styles{FlexGrow: 1, Width: -1}, n.addrInput), n.addBtn),
+		buttonsRow(n.rescan, n.closeBtn))
 	return column(10, rows...)
 }
 
