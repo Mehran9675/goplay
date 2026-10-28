@@ -121,6 +121,9 @@ bundles those libraries:
 A `[native]` section listing libraries (or finding them with
 `otool`/`ldd`/`objdump`) would cover any cgo app with shared libraries.
 
+Until then, `scripts/package.sh` does this for goplay's release builds; it
+goes away once `giode build` can.
+
 ### 2. cgo on Windows
 
 The README's table says Windows builds need "nothing extra: Gio doesn't need
