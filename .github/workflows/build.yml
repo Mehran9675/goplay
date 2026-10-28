@@ -1,9 +1,22 @@
-name: Build
+name: Release builds
 
+# Builds goplay for macOS, Linux and Windows when a release is published,
+# and attaches the packages to it. A manual run takes a tag, to build an
+# existing release again.
 on:
-  push:
-  pull_request:
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and attach the packages to
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
 
 jobs:
   macos:
@@ -12,32 +25,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ env.TAG }}
+      # This workflow's own revision, for the packaging scripts: an older
+      # release can then be packaged with current tooling.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .tools
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install libmpv and FFmpeg
+      - name: Install libmpv, FFmpeg and dylibbundler
         run: |
-          brew install mpv pkg-config ffmpeg
+          brew install mpv pkg-config ffmpeg dylibbundler
           # Homebrew's mpv.pc can name a Cellar folder that isn't there;
           # its stable prefix always is.
           echo "CGO_LDFLAGS=-L$(brew --prefix)/lib" >> "$GITHUB_ENV"
           echo "CGO_CFLAGS=-I$(brew --prefix)/include" >> "$GITHUB_ENV"
-      - name: Make test videos
-        run: scripts/test-media.sh "$RUNNER_TEMP/media"
-      - name: Vet
-        run: go vet ./...
       - name: Test
+        run: |
+          .tools/scripts/test-media.sh "$RUNNER_TEMP/media"
+          go vet ./...
+          GOPLAY_TEST_MEDIA="$RUNNER_TEMP/media/chapters.mkv" GOPLAY_TEST_MEDIA_DIR="$RUNNER_TEMP/media" go test ./...
+      - name: Package
+        run: .tools/scripts/package.sh "$TAG"
+      - name: Attach to the release
         env:
-          GOPLAY_TEST_MEDIA: ${{ runner.temp }}/media/chapters.mkv
-          GOPLAY_TEST_MEDIA_DIR: ${{ runner.temp }}/media
-        run: go test ./...
-      - name: Build
-        run: ./build.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: goplay-macos-arm64
-          path: goplay
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/*.zip --clobber
 
   linux:
     name: Linux
@@ -45,7 +60,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ env.TAG }}
+      # This workflow's own revision, for the packaging scripts: an older
+      # release can then be packaged with current tooling.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .tools
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -54,21 +75,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libmpv-dev ffmpeg pkg-config \
             libx11-dev libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev
-      - name: Make test videos
-        run: scripts/test-media.sh "$RUNNER_TEMP/media"
-      - name: Vet
-        run: go vet ./...
       - name: Test
+        run: |
+          .tools/scripts/test-media.sh "$RUNNER_TEMP/media"
+          go vet ./...
+          GOPLAY_TEST_MEDIA="$RUNNER_TEMP/media/chapters.mkv" GOPLAY_TEST_MEDIA_DIR="$RUNNER_TEMP/media" go test ./...
+      - name: Package
+        run: .tools/scripts/package.sh "$TAG"
+      - name: Attach to the release
         env:
-          GOPLAY_TEST_MEDIA: ${{ runner.temp }}/media/chapters.mkv
-          GOPLAY_TEST_MEDIA_DIR: ${{ runner.temp }}/media
-        run: go test ./...
-      - name: Build
-        run: ./build.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: goplay-linux-amd64
-          path: goplay
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/*.tar.gz --clobber
 
   windows:
     name: Windows
@@ -79,7 +96,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ env.TAG }}
+      # This workflow's own revision, for the packaging scripts: an older
+      # release can then be packaged with current tooling.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .tools
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -89,30 +112,22 @@ jobs:
           path-type: inherit
           update: true
           install: >-
+            zip
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-pkgconf
             mingw-w64-ucrt-x86_64-mpv
             mingw-w64-ucrt-x86_64-ffmpeg
-      - name: Make test videos
-        run: scripts/test-media.sh "$RUNNER_TEMP/media"
-      - name: Vet
-        env:
-          CGO_ENABLED: "1"
-        run: go vet ./...
+            mingw-w64-ucrt-x86_64-angleproject
       - name: Test
         env:
           CGO_ENABLED: "1"
-          GOPLAY_TEST_MEDIA_DIR: ${{ runner.temp }}/media
         run: |
-          export GOPLAY_TEST_MEDIA="$GOPLAY_TEST_MEDIA_DIR/chapters.mkv"
-          go test ./...
-      - name: Build
+          .tools/scripts/test-media.sh "$RUNNER_TEMP/media"
+          go vet ./...
+          GOPLAY_TEST_MEDIA="$RUNNER_TEMP/media/chapters.mkv" GOPLAY_TEST_MEDIA_DIR="$RUNNER_TEMP/media" go test ./...
+      - name: Package
+        run: .tools/scripts/package.sh "$TAG"
+      - name: Attach to the release
         env:
-          CGO_ENABLED: "1"
-        run: |
-          version="$(git describe --tags --always --dirty)"
-          go build -ldflags "-H=windowsgui -X github.com/mehran9675/goplay/internal/app.Version=$version" -o goplay.exe .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: goplay-windows-amd64
-          path: goplay.exe
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/*.zip --clobber

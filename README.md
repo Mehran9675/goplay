@@ -118,8 +118,10 @@ To skip the search, set `LIBMPV` (all platforms), `MINGW` and `ANGLE`
 Optional at runtime: **yt-dlp** for web pages, **FFmpeg** for casting files
 TVs can't play, and on Linux **zenity** for file dialogs.
 
-Every push is built and tested on macOS, Linux and Windows
-(`.github/workflows/build.yml`); the builds are attached to each run. The
+Publishing a release builds and tests it on macOS, Linux and Windows and
+attaches the packages to it (`.github/workflows/build.yml`,
+`scripts/package.sh`); the macOS app carries libmpv inside, the Windows zip
+has every DLL next to `goplay.exe`, and Linux uses the system's libmpv. The
 project is set up for the Giode CLI (`giode.toml`), which can't yet bundle
 libmpv into app packages; see `docs/giode-gaps.md`.
 
