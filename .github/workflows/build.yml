@@ -129,7 +129,9 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.msystem }}
-          location: C:\
+          # The runner's own MSYS2, in C:\msys64 where giode.toml's
+          # [native.windows] search looks.
+          release: false
           path-type: inherit
           update: true
           install: >-
