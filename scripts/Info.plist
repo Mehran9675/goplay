@@ -32,6 +32,28 @@
 	<array>
 		<string>_googlecast._tcp</string>
 	</array>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Play with GoPlay</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>playWithGoPlay</string>
+			<key>NSPortName</key>
+			<string>goplay</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.movie</string>
+				<string>public.audio</string>
+				<string>public.folder</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

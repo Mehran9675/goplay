@@ -58,7 +58,26 @@ static BOOL goplay_open_file(id self, SEL _cmd, NSApplication* app, NSString* pa
 	return YES;
 }
 
+// GoplayServices answers the "Play with GoPlay" service that Info.plist
+// adds to Finder's context menu (Quick Actions, or Services).
+@interface GoplayServices : NSObject
+@end
+
+@implementation GoplayServices
+- (void)playWithGoPlay:(NSPasteboard*)pboard userData:(NSString*)userData error:(NSString**)error {
+	NSArray<NSURL*>* urls = [pboard readObjectsForClasses:@[NSURL.class]
+		options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
+	for (NSURL* url in urls) {
+		goplayOpenedFile((char*)url.path.fileSystemRepresentation);
+	}
+}
+@end
+
+static GoplayServices* goplay_services;
+
 void goplay_install_open_handler(void) {
+	goplay_services = [GoplayServices new];
+	NSApp.servicesProvider = goplay_services;
 	id delegate = NSApp.delegate;
 	if (delegate == nil) {
 		return;

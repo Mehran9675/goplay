@@ -1,0 +1,7 @@
+[Nemo Action]
+Name=Play with GoPlay
+Comment=Play the selected videos, music or folders in goplay
+Exec=goplay %F
+Icon-Name=goplay
+Selection=notnone
+Mimetypes=video/*;audio/*;inode/directory;
