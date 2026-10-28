@@ -252,7 +252,7 @@ func (p *prefsView) row(c *prefControl) elements.Element {
 		if help != "" {
 			help += " "
 		}
-		help += "Takes effect when goplay restarts."
+		help += "Takes effect when GoPlay restarts."
 	}
 	if help != "" {
 		labels = append(labels, elements.Text(help, styles.Styles{Color: colFaint, FontSize: 12}))

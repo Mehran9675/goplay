@@ -1,4 +1,4 @@
-# goplay
+# GoPlay
 
 A video player for people who just want to watch something, with depth for
 those who want to tune everything. It plays almost any file or stream with
@@ -61,7 +61,7 @@ Made for macOS first, and built for Windows and Linux too.
 **Casting**
 - Chromecast, Google TV and Android TV, and DLNA/UPnP renderers (most smart
   TVs, consoles and receivers), found automatically on the network.
-- Local files are served to the TV from goplay; files the TV can't play are
+- Local files are served to the TV from GoPlay; files the TV can't play are
   repackaged (or converted) on the fly with FFmpeg. Subtitles are sent along.
 - The controls drive the TV while casting; stopping picks up here where the
   TV left off.
@@ -69,13 +69,13 @@ Made for macOS first, and built for Windows and Linux too.
 **For power users**
 - Every mpv option: in Settings, as "Extra mpv options", or in `mpv.conf`.
   `input.conf` bindings and mpv scripts (Lua or JavaScript) work too; keys
-  goplay doesn't use reach them.
+  GoPlay doesn't use reach them.
 - `goplay --run=fullscreen,info movie.mkv` runs commands at startup.
 - Media information panel (codec, resolution, color, bitrate, decoder,
   dropped frames) and the mpv log.
 
 Settings, `mpv.conf`, `input.conf`, `scripts/` and resume data live in
-goplay's folder: `~/Library/Application Support/goplay` on macOS,
+GoPlay's folder: `~/Library/Application Support/goplay` on macOS,
 `%AppData%\goplay` on Windows, `~/.config/goplay` on Linux (Settings ›
 Advanced › Open Config Folder).
 
@@ -83,51 +83,51 @@ Advanced › Open Config Folder).
 
 You need Go 1.26+, a C compiler, pkg-config, libmpv's development files and
 the [giode CLI](https://github.com/Mehran9675/giode-cli), which builds and
-packages goplay (`giode.toml`):
+packages GoPlay from `giode.toml`:
 
 ```sh
 go install github.com/mehran9675/giode-cli/cmd/giode@latest
+giode run [file]       # build and run on this computer
+giode build desktop    # this computer's packages, in dist/
 ```
 
-`build.sh` and `build.bat` find the toolchain themselves, say exactly what's
-missing and how to install it, then run `giode build` into `dist/`. With the
-toolchain set up, `giode run`, `giode build dmg`, `giode build
-windows-installer` and `giode build deb` work directly too.
-
-| | build | build and run |
-|---|---|---|
-| macOS, Linux | `./build.sh` | `./run.sh [file]` |
-| Windows | `build.bat` | `run.bat [file]` |
+`giode build dmg`, `giode build windows-installer` and `giode build deb rpm`
+make one kind of package.
 
 ### macOS
 
 ```sh
 xcode-select --install
 brew install go mpv pkg-config
-./build.sh
 ```
 
 ### Linux
 
 ```sh
-# Debian and Ubuntu (build.sh prints the dnf and pacman equivalents)
+# Debian and Ubuntu
 sudo apt install build-essential pkg-config libmpv-dev zenity \
   libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev \
   libffi-dev libxcursor-dev libvulkan-dev
-./build.sh
 ```
 
 ### Windows
 
-Install Go, MinGW-w64 and ANGLE (MSYS2: `pacman -S mingw-w64-x86_64-gcc
-mingw-w64-x86_64-pkgconf mingw-w64-x86_64-angleproject`) and the libmpv
-development package (`mpv-dev-x86_64-*.7z` from shinchiro/mpv-winbuild-cmake,
-extracted to `%USERPROFILE%\libmpv`). `build.bat` copies libmpv to
-`build\native`, and the giode CLI makes `dist\windows\goplay.exe` with libmpv,
-ANGLE and the DLLs they need beside it; `run.bat` builds and runs it.
+In an MSYS2 MINGW64 shell, install the compiler, pkg-config and ANGLE (or
+have VS Code installed, whose ANGLE the CLI also finds), then put libmpv in
+`build/native`, where `giode.toml` looks for it: extract
+`mpv-dev-x86_64-*.7z` from shinchiro/mpv-winbuild-cmake's releases there and
+describe it for pkg-config.
 
-To skip the search, set `LIBMPV` (all platforms), `MINGW` (Windows), or `CC`
-and `PKG_CONFIG` (macOS and Linux).
+```sh
+pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf mingw-w64-x86_64-angleproject
+mkdir -p build/native   # extract mpv-dev-x86_64-*.7z here
+printf 'prefix=%s\nName: mpv\nDescription: libmpv\nVersion: 0.40.0\nLibs: -L${prefix} -lmpv\nCflags: -I${prefix}/include\n' \
+  "$(cygpath -m "$PWD/build/native")" > build/native/mpv.pc
+export PKG_CONFIG_PATH="$PWD/build/native"
+giode run
+```
+
+The CLI puts libmpv, ANGLE and the DLLs they need next to `GoPlay.exe`.
 
 Optional at runtime: **yt-dlp** for web pages, **FFmpeg** for casting files
 TVs can't play, and on Linux **zenity** for file dialogs.
@@ -138,15 +138,15 @@ packages to it (`.github/workflows/build.yml`):
 
 | | installer | portable |
 |---|---|---|
-| macOS | `.dmg` with goplay.app (libmpv inside) | |
-| Windows | `-setup.exe`, for the current user | `.zip`, libmpv and ANGLE next to `goplay.exe` |
+| macOS | `.dmg` with GoPlay.app (libmpv inside) | |
+| Windows | `-setup.exe`, for the current user | `.zip`, libmpv and ANGLE next to `GoPlay.exe` |
 | Linux | `.deb` and `.rpm`, using the system's libmpv | `.tar.gz` |
 
-goplay opens video and audio files from the file manager's "Open with", and
+GoPlay opens video and audio files from the file manager's "Open with", and
 adds "Play with GoPlay" to its context menu: a Finder Quick Action on macOS
-(once goplay is in Applications and has run once), an Explorer entry from the
+(once GoPlay is in Applications and has run once), an Explorer entry from the
 Windows installer (under "Show more options" on Windows 11), and Dolphin,
-Nemo, GNOME Files and Caja entries on Linux, added when goplay first runs.
+Nemo, GNOME Files and Caja entries on Linux, added when GoPlay first runs.
 
 ## How it works
 
@@ -154,7 +154,7 @@ Nemo, GNOME Files and Caja entries on Linux, added when goplay first runs.
 main.go                 command line, window icon
 internal/mpv/           cgo binding: client API (commands, observed properties,
                         events, wakeups) and the OpenGL render API
-internal/player/        the mpv core goplay drives: state, commands, filters,
+internal/player/        the mpv core GoPlay drives: state, commands, filters,
                         3D and 360° projection, track names
 internal/app/           the player itself: the window and its frames, commands,
                         opening media, 3D/VR, casting, and the views
@@ -165,7 +165,7 @@ internal/cast/          Chromecast (mDNS, Cast v2) and DLNA (SSDP, UPnP
                         AVTransport), and the HTTP server feeding them
 ```
 
-**Rendering.** goplay is a `giode.App` with an underlay: each frame, libmpv
+**Rendering.** GoPlay is a `giode.App` with an underlay: each frame, libmpv
 renders the video into the window's OpenGL framebuffer, then Gio draws the
 Giode interface over it. Video stays on the GPU. On Windows the context is
 OpenGL ES through ANGLE, so hardware-decoded D3D11 frames are shared without

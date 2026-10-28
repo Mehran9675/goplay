@@ -49,12 +49,14 @@ const (
 // bar.
 const scrollGap = 14
 
-// scrollBar is the scroll bars' look: thin and quiet, there when needed.
+// scrollBar is the scroll bars' look: a thin thumb, no track, set in
+// from the edge, shown while scrolling or pointed at.
 func scrollBar() properties.ScrollBar {
-	return properties.ScrollBar{Width: 5, MinThumbLength: 32, ThumbColor: "#ffffff30", TrackColor: "#ffffff08"}
+	return properties.ScrollBar{Width: 5, MinThumbLength: 32, Inset: 4, AutoHide: true,
+		ThumbColor: "#ffffff40", TrackColor: "transparent"}
 }
 
-// listStyles are a list's styles with goplay's scroll bar.
+// listStyles are a list's styles with GoPlay's scroll bar.
 func listStyles() styles.Styles {
 	return styles.Styles{BorderColor: colBorder, ScrollBar: scrollBar()}
 }

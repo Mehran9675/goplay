@@ -172,7 +172,7 @@ func newDialogs(u *ui) *dialogs {
 		mpvVersion, _ := a.player.Get("mpv-version")
 		ffVersion, _ := a.player.Get("ffmpeg-version")
 		return column(10,
-			elements.Row(styles.Styles{Gap: 12, Align: properties.AlignCenter}, ic("logo", 40, colHighlight), heading("goplay")),
+			elements.Row(styles.Styles{Gap: 12, Align: properties.AlignCenter}, ic("logo", 40, colHighlight), heading("GoPlay")),
 			note("Version "+Version),
 			note("Plays nearly anything with "+mpvVersion+" and FFmpeg "+ffVersion+"."),
 			note("Interface built with Giode and Gio. Icons from Material Design."),

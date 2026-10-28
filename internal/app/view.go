@@ -88,7 +88,7 @@ func newUI(a *App) *ui {
 	u := &ui{a: a, osdLevel: -1, lastMove: time.Now()}
 	// The bar itself is transparent: titleBar puts it on a solid strip
 	// or a fade, depending on the mode.
-	u.title = titlebar.New(windowCtl{a}, "goplay", styles.Styles{
+	u.title = titlebar.New(windowCtl{a}, "GoPlay", styles.Styles{
 		Background: "transparent",
 		Color:      colText,
 		FontSize:   13,
@@ -274,7 +274,7 @@ func (u *ui) windowTitle() string {
 	case !st.Idle && st.Title != "":
 		return st.Title
 	}
-	return "goplay"
+	return "GoPlay"
 }
 
 // titleButtons are the title bar's extra controls: the app menu.

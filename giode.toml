@@ -6,13 +6,13 @@
 #   giode build windows-installer
 #   giode build deb             (and linux, rpm, appimage)
 #
-# goplay draws video under its UI with Giode's underlay and OpenGL, and
+# GoPlay draws video under its UI with Giode's underlay and OpenGL, and
 # links libmpv with cgo; [native] bundles libmpv and what it loads. On
-# Windows the CLI bundles ANGLE too (renderer = "opengl"); the build
-# scripts and CI put libmpv in build/native first.
+# Windows the CLI bundles ANGLE too (renderer = "opengl"); libmpv goes in
+# build/native first (see the README).
 
 [app]
-name = "goplay"
+name = "GoPlay"
 id = "com.mehran9675.goplay"
 version = "1.1.0"
 build = 2
@@ -28,7 +28,7 @@ ldflags = "-X github.com/mehran9675/goplay/internal/app.Version={version}"
 min_os = 11
 
 [macos.usage]
-local_network = "goplay looks for Chromecast and DLNA devices on your network so you can cast to them."
+local_network = "GoPlay looks for Chromecast and DLNA devices on your network so you can cast to them."
 
 [macos.plist]
 NSBonjourServices = ["_googlecast._tcp"]

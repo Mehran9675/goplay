@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Gathers what `giode build` left in dist/<platform> into out/ under
 # release names that say the system and CPU:
-#   macOS    goplay-<version>-macos-<arch>.dmg
-#   Windows  goplay-<version>-windows-<arch>-setup.exe, and the program
-#            with its DLLs as goplay-<version>-windows-<arch>.zip
+#   macOS    GoPlay-<version>-macos-<arch>.dmg
+#   Windows  GoPlay-<version>-windows-<arch>-setup.exe, and the program
+#            with its DLLs as GoPlay-<version>-windows-<arch>.zip
 #   Linux    the .deb and .rpm as built, and the program with its files as
-#            goplay-<version>-linux-<arch>.tar.gz
+#            GoPlay-<version>-linux-<arch>.tar.gz
 # The version is the release tag's ($GIODE_VERSION), or giode.toml's with
 # -dev for a build without one.
 # Usage: scripts/ci-collect.sh <macos|windows|linux> <arch>
@@ -17,7 +17,7 @@ if [ -n "${GIODE_VERSION:-}" ]; then
 else
 	version="$(sed -n 's/^version = "\(.*\)"/\1/p' giode.toml)-dev"
 fi
-name="goplay-$version-$platform-$arch"
+name="GoPlay-$version-$platform-$arch"
 rm -rf out
 mkdir -p out
 case "$platform" in

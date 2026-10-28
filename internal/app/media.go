@@ -247,7 +247,7 @@ func (a *App) editConfigFile(name string) {
 		cmd = exec.Command("xdg-open", path)
 	}
 	startDetached(cmd)
-	a.toast(name + " is read when goplay starts")
+	a.toast(name + " is read when GoPlay starts")
 }
 
 var configTemplates = map[string]string{
@@ -324,7 +324,7 @@ func (a *App) applySetting(key string) {
 		}
 	}
 	if d.Restart {
-		a.toast(d.Label + ": takes effect when goplay restarts")
+		a.toast(d.Label + ": takes effect when GoPlay restarts")
 		return
 	}
 	var opts []settings.MPVOption

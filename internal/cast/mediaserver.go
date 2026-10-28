@@ -119,7 +119,7 @@ func (s *MediaServer) Browse(ctx context.Context, id string) ([]MediaEntry, erro
 		total, _ := strconv.Atoi(tag(resp, "TotalMatches"))
 		entries, err := parseDIDL(tag(resp, "Result"))
 		if err != nil {
-			return nil, fmt.Errorf("cast: %s sent a listing goplay can't read: %w", s.Name, err)
+			return nil, fmt.Errorf("cast: %s sent a listing GoPlay can't read: %w", s.Name, err)
 		}
 		for _, e := range entries {
 			switch {
