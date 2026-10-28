@@ -1,27 +1,42 @@
 # Project file for the giode CLI (github.com/Mehran9675/giode-cli).
 #
-# goplay links libmpv with cgo, so `giode build` can produce the binary,
-# but the CLI can't yet bundle libmpv and its libraries into the .app,
-# .dmg, installer or AppImage; see docs/giode-gaps.md. Until then,
-# build.sh / build.bat produce runnable builds.
+#   giode run                   build and run on this computer
+#   giode build desktop         this computer's packages
+#   giode build dmg             macOS: the app in a disk image
+#   giode build windows-installer
+#   giode build deb             (and linux, rpm, appimage)
+#
+# goplay draws video under its UI with Giode's underlay and OpenGL, and
+# links libmpv with cgo; [native] bundles libmpv and what it loads. The
+# build scripts (build.sh, build.bat) and CI put the ANGLE DLLs Windows
+# needs, and libmpv where it isn't in MSYS2, in build/native first.
 
 [app]
 name = "goplay"
 id = "com.mehran9675.goplay"
-version = "0.2.0"
-build = 1
+version = "1.1.0"
+build = 2
 icon = "assets/icon.png"
 package = "."
 publisher = "Mehran Zahiroddini"
 description = "A fast, beautiful video player that plays almost anything."
 website = "https://github.com/Mehran9675/goplay"
-ldflags = "-X github.com/mehran9675/goplay/internal/app.Version=0.2.0"
+renderer = "opengl"
+# Kept equal to version (CI sets both from the release tag).
+ldflags = "-X github.com/mehran9675/goplay/internal/app.Version=1.1.0"
 
 [macos]
 min_os = 11
 
+[macos.usage]
+local_network = "goplay looks for Chromecast and DLNA devices on your network so you can cast to them."
+
+[macos.plist]
+NSBonjourServices = ["_googlecast._tcp"]
+
 [windows]
 arch = "amd64"
+cc = "cc"
 
 [windows.installer]
 per_machine = false
@@ -30,3 +45,38 @@ desktop_shortcut = true
 [linux]
 categories = ["AudioVideo", "Video", "Player"]
 description = "A video player built on mpv: hardware decoding, subtitles, 3D and 360° video, casting to Chromecast and DLNA."
+maintainer = "Mehran <61628815+Mehran9675@users.noreply.github.com>"
+license = "MIT"
+
+[native]
+bundle = true
+
+[native.windows]
+search = ["build/native", "C:/msys64/ucrt64/bin", "C:/msys64/clangarm64/bin", "C:/msys64/mingw64/bin"]
+# Gio loads ANGLE at run time, so nothing imports it; libmpv is listed
+# because the CLI misses Windows imports (docs/giode-gaps.md).
+libraries = ["build/native/libmpv-2.dll", "build/native/libEGL.dll", "build/native/libGLESv2.dll"]
+
+[native.macos]
+search = ["/opt/homebrew/lib", "/usr/local/lib"]
+
+[native.linux]
+system = true
+deb_depends = ["libmpv2 | libmpv1"]
+rpm_requires = ["mpv-libs"]
+
+[[file_types]]
+name = "Video"
+extensions = ["mkv", "mk3d", "webm", "mp4", "m4v", "mov", "avi", "ts", "m2ts", "mts", "flv", "wmv", "mpg", "mpeg", "ogv", "vob", "3gp"]
+mime_types = ["video/x-matroska", "video/webm", "video/mp4", "video/quicktime", "video/x-msvideo", "video/mp2t", "video/x-flv", "video/x-ms-wmv", "video/mpeg", "video/ogg", "video/3gpp"]
+
+[[file_types]]
+name = "Audio"
+extensions = ["mp3", "flac", "ogg", "opus", "m4a", "aac", "wav", "wma"]
+mime_types = ["audio/mpeg", "audio/flac", "audio/ogg", "audio/opus", "audio/mp4", "audio/aac", "audio/x-wav", "audio/x-ms-wma"]
+
+[[context_actions]]
+id = "play"
+label = "Play with GoPlay"
+extensions = [".mkv", ".mk3d", ".webm", ".mp4", ".m4v", ".mov", ".avi", ".ts", ".m2ts", ".mts", ".flv", ".wmv", ".mpg", ".mpeg", ".ogv", ".vob", ".3gp", ".mp3", ".flac", ".ogg", ".opus", ".m4a", ".aac", ".wav", ".wma"]
+folders = true

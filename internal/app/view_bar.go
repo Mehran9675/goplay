@@ -193,7 +193,7 @@ func (b *controlBar) refresh() {
 	}
 
 	full := "fullscreen"
-	if a.win.Fullscreen() {
+	if a.g.Fullscreen() {
 		full = "fullscreen-exit"
 	}
 	b.full.Icon(ic(full, iconSize, colText))

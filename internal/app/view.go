@@ -7,10 +7,12 @@ import (
 
 	"gioui.org/f32"
 	"gioui.org/gesture"
+	"gioui.org/io/event"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
+	"gioui.org/op/paint"
 
 	"github.com/mehran9675/giode/components/drawer"
 	"github.com/mehran9675/giode/components/menu"
@@ -45,10 +47,11 @@ type ui struct {
 	lastMove              time.Time
 	lastPointer           f32.Point
 	cursorHidden          bool
+	pointerTag            struct{}
 
 	pip            bool
-	pipRestore     image.Rectangle
-	pipWasFloating bool
+	pipRestore     image.Point // the window's size before, in dp
+	pipWasOnTop    bool
 
 	video *videoArea
 
@@ -90,10 +93,7 @@ func newUI(a *App) *ui {
 		Height:     properties.Height(u.titleHeightDp()),
 	})
 	if runtime.GOOS == "darwin" {
-		// macOS draws its own traffic lights (see the platform package);
-		// the bar only leaves room for them.
-		u.title.Variant(titlebar.VariantMac).Hide(titlebar.ButtonMinimize, titlebar.ButtonMaximize, titlebar.ButtonClose).
-			Leading(elements.Box(styles.Styles{Width: 64}))
+		u.title.Variant(titlebar.VariantMac)
 	}
 	u.title.Trailing(u.titleButtons()...)
 	u.bar = newControlBar(u)
@@ -107,24 +107,6 @@ func newUI(a *App) *ui {
 		Placement(toaster.TopCenter).Max(3)
 	return u
 }
-
-// windowCtl lets the title bar drive the window.
-type windowCtl struct{ a *App }
-
-func (w windowCtl) Minimize() { w.a.win.Minimize() }
-func (w windowCtl) ToggleMaximize() {
-	if w.a.ui.pip {
-		w.a.togglePiP()
-	}
-	if w.a.win.Fullscreen() {
-		w.a.setFullscreen(false)
-		return
-	}
-	w.a.win.ToggleMaximize()
-}
-func (w windowCtl) Close()          { w.a.Quit() }
-func (w windowCtl) Maximized() bool { return w.a.win.Maximized() || w.a.win.Fullscreen() }
-func (w windowCtl) Focused() bool   { return w.a.win.Focused() }
 
 func (u *ui) titleHeightDp() int {
 	if runtime.GOOS == "darwin" {
@@ -141,8 +123,8 @@ func (u *ui) barHeightPx() int   { return u.dp(controlBarH) }
 // overlay reports whether the chrome floats over the video (maximized,
 // fullscreen, picture in picture) rather than sitting beside it.
 func (u *ui) overlay() bool {
-	w := u.a.win
-	return w.Maximized() || w.Fullscreen() || u.pip
+	g := u.a.g
+	return g.Maximized() || g.Fullscreen() || u.pip
 }
 
 // beginFrame records the frame's size and refreshes what depends on
@@ -159,7 +141,6 @@ func (u *ui) beginFrame(fb image.Point, scale float32) {
 		u.infoNext = time.Now().Add(time.Second)
 	}
 	u.a.vrTick()
-	u.updateCursor()
 }
 
 // nextTimer is the next moment the UI changes on its own.
@@ -194,21 +175,32 @@ func (u *ui) hideDelay() time.Duration {
 	return time.Duration(s * float64(time.Second))
 }
 
-// updateCursor hides the pointer over playing video after it rests for a
-// moment in overlay mode, like every player does.
-func (u *ui) updateCursor() {
-	p := u.a.win.CursorPx()
-	if p != u.lastPointer {
-		u.lastPointer = p
-		u.lastMove = time.Now()
+// trackPointer follows the pointer over the whole window, without
+// taking its events from anything: where it is (for the context menu)
+// and when it last moved. Over playing video in overlay mode it hides
+// once it rests for a moment, as in every player.
+func (u *ui) trackPointer(gtx layout.Context) {
+	area := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
+	pass := pointer.PassOp{}.Push(gtx.Ops)
+	event.Op(gtx.Ops, &u.pointerTag)
+	for {
+		ev, ok := gtx.Event(pointer.Filter{Target: &u.pointerTag, Kinds: pointer.Move | pointer.Drag | pointer.Press | pointer.Scroll})
+		if !ok {
+			break
+		}
+		if e, ok := ev.(pointer.Event); ok {
+			u.lastPointer = e.Position
+			u.lastMove = time.Now()
+		}
 	}
 	st := &u.a.player.State
-	hide := u.overlay() && !st.Idle && !st.Paused && !u.topShown && !u.bottomShown && !u.modalOpen() &&
+	u.cursorHidden = u.overlay() && !st.Idle && !st.Paused && !u.topShown && !u.bottomShown && !u.modalOpen() &&
 		time.Since(u.lastMove) >= u.hideDelay()
-	if hide != u.cursorHidden {
-		u.cursorHidden = hide
-		u.a.win.HideCursor(hide)
+	if u.cursorHidden {
+		pointer.CursorNone.Add(gtx.Ops)
 	}
+	pass.Pop()
+	area.Pop()
 }
 
 // layout draws the whole UI.
@@ -226,10 +218,13 @@ func (u *ui) layout(gtx layout.Context) {
 	bottomHovered := u.bottomHover.Update(gtx.Source)
 	u.topShown = !overlay || st.Idle || topHovered
 	u.bottomShown = !overlay || st.Idle || bottomHovered || u.bar.busy() || (u.menu != nil && u.menu.Opened())
-	if u.a.win.Fullscreen() && !st.Idle {
+	if u.a.g.Fullscreen() && !st.Idle {
 		u.topShown = u.topShown && topHovered
 	}
-	u.a.win.SetTrafficLights(u.topShown)
+	if st.Idle || u.a.casting() {
+		// mpv draws nothing then; the window shows through.
+		paint.Fill(gtx.Ops, properties.CalcColor(colBackground))
+	}
 
 	// The video area, with everything drawn over the picture.
 	place(gtx, u.videoRect, u.video)
@@ -255,6 +250,7 @@ func (u *ui) layout(gtx layout.Context) {
 		u.menu.Layout(gtx)
 	}
 	u.toasts.Layout(gtx)
+	u.trackPointer(gtx)
 }
 
 // titleBar puts the title bar on a solid strip beside the video, or on a
@@ -314,13 +310,19 @@ func zone(gtx layout.Context, r image.Rectangle, h *gesture.Hover) {
 // anchor records where an element was laid out, to open popovers from
 // it.
 type anchor struct {
-	el   elements.Element
-	pos  image.Point
-	size image.Point
+	el elements.Element
+	// pos is where it was in the last frame, exact once that frame was
+	// laid out; tracked is the probe TrackPosition keeps moving.
+	pos, tracked image.Point
+	size         image.Point
 }
 
 func (an *anchor) Layout(gtx layout.Context) layout.Dimensions {
-	an.pos = elements.AbsolutePosition()
+	// Rows place their children after laying them out; TrackPosition
+	// follows them there. Clicks handled while el lays out read the
+	// last frame's position, which is final.
+	an.pos = an.tracked
+	elements.TrackPosition(&an.tracked)
 	d := an.el.Layout(gtx)
 	an.size = d.Size
 	return d
@@ -422,12 +424,3 @@ func (u *ui) flashPlayPause(playing bool) {
 func (a *App) toast(msg string)      { a.ui.toasts.Show(toaster.Info, msg) }
 func (a *App) toastError(msg string) { a.ui.toasts.Show(toaster.Error, msg) }
 
-// canDragAt reports whether a press at p (pixels) should move the
-// window: on the video in a normal window, with nothing open over it.
-func (a *App) canDragAt(p f32.Point) bool {
-	u := a.ui
-	if u.overlay() || u.modalOpen() || u.panelOpen || (u.menu != nil && u.menu.Opened()) || a.vrActive() {
-		return false
-	}
-	return image.Pt(int(p.X), int(p.Y)).In(u.videoRect)
-}

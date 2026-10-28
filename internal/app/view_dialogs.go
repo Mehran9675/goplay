@@ -144,7 +144,7 @@ func newDialogs(u *ui) *dialogs {
 	}, dialogStyles(560))
 
 	// Log.
-	copyLog := secondaryButton("Copy", func() { a.win.SetClipboard(strings.Join(d.lines, "\n")); a.toast("Log copied") })
+	copyLog := secondaryButton("Copy", func() { a.g.SetClipboard(strings.Join(d.lines, "\n")); a.toast("Log copied") })
 	closeLog := secondaryButton("Close", func() { d.logOpen = false })
 	d.logList = virtuallist.New(func() int { return len(d.lines) }, 20, func(i int) elements.Element {
 		if i >= len(d.lines) {
@@ -213,14 +213,17 @@ func (d *dialogs) closeTop() bool {
 
 func (u *ui) showOpenURL() {
 	d := u.dialogs
-	text := strings.TrimSpace(u.a.win.Clipboard())
-	if !library.IsURL(text) {
-		text = ""
-	}
-	d.urlInput.SetText(text)
+	d.urlInput.SetText("")
 	d.urlOpen = true
 	d.urlInput.Focus()
-	d.urlInput.SelectAll()
+	// A link on the clipboard fills the field.
+	u.a.g.ReadClipboard(func(text string) {
+		text = strings.TrimSpace(text)
+		if d.urlOpen && d.urlInput.Text() == "" && library.IsURL(text) {
+			d.urlInput.SetText(text)
+			d.urlInput.SelectAll()
+		}
+	})
 }
 
 func (u *ui) showJumpTo() {

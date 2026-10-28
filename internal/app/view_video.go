@@ -61,7 +61,7 @@ func newVideoArea(u *ui) *videoArea {
 					a.togglePause()
 					u.flash = ""
 				}
-				a.setFullscreen(!a.win.Fullscreen())
+				a.setFullscreen(!a.g.Fullscreen())
 			}
 		}).
 		OnSecondaryClick(func(e elements.ClickEvent) {

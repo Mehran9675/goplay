@@ -2,9 +2,9 @@
 # goplay macOS/Linux toolchain detection, build and run.
 #
 # Called by build.sh and run.sh; not meant to be run directly. It finds Go,
-# a C compiler, pkg-config and libmpv (plus the X11/OpenGL headers GLFW
-# needs on Linux), stops with an error naming whatever is missing, then
-# builds goplay.
+# a C compiler, pkg-config and libmpv (plus the Wayland, X11 and EGL
+# headers Gio needs on Linux), stops with an error naming whatever is
+# missing, then builds goplay with the giode CLI into dist/.
 #
 # Detection order: an environment variable override (CC, PKG_CONFIG,
 # LIBMPV - the install prefix of a custom libmpv build), then PATH and the
@@ -64,7 +64,7 @@ install_hint() {
 		cc) echo "sudo apt install build-essential" ;;
 		pkg-config) echo "sudo apt install pkg-config" ;;
 		mpv) echo "sudo apt install libmpv-dev" ;;
-		glfw) echo "sudo apt install libx11-dev libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev" ;;
+		gio) echo "sudo apt install libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev" ;;
 		zenity) echo "sudo apt install zenity" ;;
 		esac
 		;;
@@ -74,7 +74,7 @@ install_hint() {
 		cc) echo "sudo dnf install gcc" ;;
 		pkg-config) echo "sudo dnf install pkgconf-pkg-config" ;;
 		mpv) echo "sudo dnf install mpv-devel   (from RPM Fusion)" ;;
-		glfw) echo "sudo dnf install libX11-devel libXrandr-devel libXxf86vm-devel libXi-devel libXcursor-devel libXinerama-devel mesa-libGL-devel" ;;
+		gio) echo "sudo dnf install wayland-devel libX11-devel libxkbcommon-x11-devel mesa-libGLES-devel mesa-libEGL-devel libXcursor-devel vulkan-headers" ;;
 		zenity) echo "sudo dnf install zenity" ;;
 		esac
 		;;
@@ -84,7 +84,7 @@ install_hint() {
 		cc) echo "sudo pacman -S base-devel" ;;
 		pkg-config) echo "sudo pacman -S pkgconf" ;;
 		mpv) echo "sudo pacman -S mpv" ;;
-		glfw) echo "sudo pacman -S libx11 libxrandr libxxf86vm libxi libxcursor libxinerama mesa" ;;
+		gio) echo "sudo pacman -S wayland libx11 libxkbcommon-x11 libxcursor mesa vulkan-headers" ;;
 		zenity) echo "sudo pacman -S zenity" ;;
 		esac
 		;;
@@ -94,7 +94,7 @@ install_hint() {
 		cc) echo "install gcc or clang from your distribution" ;;
 		pkg-config) echo "install pkg-config (or pkgconf) from your distribution" ;;
 		mpv) echo "install the libmpv development package, or set LIBMPV to its install prefix" ;;
-		glfw) echo "install the X11 (Xrandr, Xxf86vm, Xi, Xcursor, Xinerama) and OpenGL development packages" ;;
+		gio) echo "install the Wayland, X11 (xcb, xkbcommon-x11, Xcursor), EGL and GLES development packages" ;;
 		zenity) echo "install zenity from your distribution" ;;
 		esac
 		;;
@@ -208,17 +208,17 @@ if [ -n "$pkgconfig" ]; then
 	fi
 fi
 
-# --- Linux: GLFW build dependencies and dialogs -------------------------
+# --- Linux: Gio's build dependencies and dialogs ------------------------
 if [ "$os" = Linux ] && [ -n "$pkgconfig" ]; then
-	step "Looking for X11/OpenGL development files (GLFW)"
+	step "Looking for Wayland, X11 and EGL development files (Gio)"
 	missing=""
-	for m in x11 xrandr xxf86vm xi xcursor xinerama gl; do
+	for m in wayland-client wayland-cursor wayland-egl x11 x11-xcb xkbcommon xkbcommon-x11 xcursor egl glesv2; do
 		"$pkgconfig" --exists "$m" 2>/dev/null || missing="$missing $m"
 	done
 	if [ -n "$missing" ]; then
-		fail "missing development packages for:$missing" "$(install_hint glfw)"
+		fail "missing development packages for:$missing" "$(install_hint gio)"
 	else
-		found glfw "x11 xrandr xxf86vm xi xcursor xinerama gl"
+		found gio "wayland x11 xkbcommon xcursor egl glesv2"
 	fi
 	if ! command -v zenity >/dev/null 2>&1 && ! command -v qarma >/dev/null 2>&1 && ! command -v matedialog >/dev/null 2>&1; then
 		warn "zenity not found: the Open File/Folder dialogs will not work ($(install_hint zenity))"
@@ -255,19 +255,30 @@ case "${libdir:-}" in
 *) export CGO_LDFLAGS="${CGO_LDFLAGS:+$CGO_LDFLAGS }-Wl,-rpath,$libdir" ;;
 esac
 
-step "Building goplay"
-cd "$root" || exit 1
-version="$(git -C "$root" describe --tags --always --dirty 2>/dev/null || echo dev)"
-if ! go build -ldflags "-X github.com/mehran9675/goplay/internal/app.Version=$version" -o goplay .; then
-	printf '%sERROR: go build failed.%s\n' "$c_err" "$c_off" >&2
+if ! command -v giode >/dev/null 2>&1; then
+	printf '%sERROR: the giode CLI is not installed. Install it with:%s\n' "$c_err" "$c_off" >&2
+	echo "  go install github.com/mehran9675/giode-cli/cmd/giode@latest" >&2
 	exit 1
 fi
 
+cd "$root" || exit 1
+if [ "$os" = Darwin ]; then
+	target=macos
+else
+	target=linux
+fi
+# This computer's CPU only: Homebrew's libmpv isn't universal.
+arch="$(go env GOARCH)"
 if [ "$mode" = build ]; then
+	step "Building with giode (dist/$target)"
+	if ! giode build -arch "$arch" "$target"; then
+		printf '%sERROR: giode build failed.%s\n' "$c_err" "$c_off" >&2
+		exit 1
+	fi
 	echo
-	printf '%sBuild complete: %s/goplay%s\n' "$c_ok" "$root" "$c_off"
+	printf '%sBuild complete: %s/dist/%s%s\n' "$c_ok" "$root" "$target" "$c_off"
 	exit 0
 fi
 
-step "Running goplay $*"
-exec ./goplay "$@"
+step "Building and running goplay $*"
+exec giode run "$@"

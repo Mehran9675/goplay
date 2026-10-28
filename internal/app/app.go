@@ -1,41 +1,45 @@
 // Package app is goplay itself: it wires the player (mpv), the window
-// and the Giode UI together, runs the event loop, and holds the views.
+// and the Giode UI together, and holds the views.
 //
-// Files: app.go (loop and rendering), commands.go (every command),
+// Files: app.go (the window and frames), commands.go (every command),
 // media.go (opening files and URLs), stereo.go (3D and 360°), casting.go
 // (Chromecast and DLNA), theme.go and icons.go (look), and view_*.go
 // (the UI).
 //
-// Threading: everything here runs on the main thread, the UI goroutine.
-// mpv's threads and background goroutines only wake it (platform.Wake)
-// or hand it work with Post.
+// The window is a giode.App: mpv draws each video frame in its
+// underlay, straight into the window's OpenGL framebuffer, and the UI is
+// drawn over it.
+//
+// Threading: everything here runs on the UI goroutine, except the
+// underlay (drawVideo), which runs on the window's render thread and
+// only touches the render context. mpv's threads and background
+// goroutines hand work to the UI goroutine with Post.
 package app
 
 import (
 	"fmt"
 	"image"
-	"image/color"
+	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"time"
 
-	"gioui.org/gpu"
+	gioapp "gioui.org/app"
+	"gioui.org/io/event"
 	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
-	"gioui.org/unit"
 
+	"github.com/mehran9675/giode"
 	"github.com/mehran9675/giode/elements"
-	"github.com/mehran9675/giode/state"
 
 	"github.com/mehran9675/goplay/internal/actions"
 	"github.com/mehran9675/goplay/internal/library"
 	"github.com/mehran9675/goplay/internal/mpv"
-	"github.com/mehran9675/goplay/internal/platform"
 	"github.com/mehran9675/goplay/internal/player"
 	"github.com/mehran9675/goplay/internal/settings"
 )
@@ -45,11 +49,8 @@ var Version = "dev"
 
 // App is the running player.
 type App struct {
-	win      *platform.Window
+	g        *giode.App
 	player   *player.Player
-	rend     *mpv.RenderContext
-	gpu      gpu.GPU
-	ops      op.Ops
 	settings *settings.Store
 	history  *library.History
 	actions  *actions.Registry
@@ -57,16 +58,34 @@ type App struct {
 
 	configDir string
 
-	// Wakeups from other threads.
-	mpvEvents  atomic.Bool // mpv has events waiting
-	newFrame   atomic.Bool // mpv's render context wants a redraw
-	invalidate atomic.Bool // a Giode State or a background task changed something
+	// The render context lives on the render thread (see drawVideo).
+	rend       *mpv.RenderContext
+	rendFailed bool
+	// showVideo tells the render thread whether to draw mpv's picture:
+	// not while idle or casting, when the UI paints its own background.
+	showVideo atomic.Bool
 
-	postMu sync.Mutex
-	posted []func()
+	// mpvPending is set while a Post to process mpv's events is queued.
+	mpvPending atomic.Bool
 
-	// Things that need a redraw on the UI goroutine.
+	// dirty asks for another frame once this one is done.
 	dirty bool
+
+	// The window: its title as last set, its size in pixels, and whether
+	// it stays on top.
+	title   string
+	winSize image.Point
+	onTop   bool
+
+	// starting runs once the video output is ready (or failed): the files
+	// and commands from the command line. mpv turns video off for a file
+	// that starts before it.
+	starting []func()
+	ready    bool
+
+	// pausedHidden is set when minimizing paused playback, to resume it
+	// on the way back.
+	pausedHidden bool
 
 	logMu sync.Mutex
 	log   []string // mpv log lines, newest last
@@ -79,15 +98,14 @@ type App struct {
 	lastPath  string
 	lastTitle string
 
-	quitting bool
-
 	// startupCommands run once the first file has loaded (--run).
 	startupCommands []string
 }
 
 // New sets up the player and window. files are opened, then commands
-// (action IDs) run, once the window shows.
-func New(files, commands []string) (*App, error) {
+// (action IDs) run, once the window shows. icon is the window icon, as
+// PNG.
+func New(files, commands []string, icon []byte) (*App, error) {
 	// Most of a video player's memory is mpv's; keep the Go side lean.
 	debug.SetGCPercent(50)
 
@@ -97,51 +115,55 @@ func New(files, commands []string) (*App, error) {
 		a.configDir = dir
 	}
 	a.loadPrefs()
+	a.onTop = a.settings.Bool(settings.KeyAlwaysOnTop)
 
-	win, err := platform.New(platform.Options{
-		Title:     "goplay",
-		Width:     960,
-		Height:    600,
-		MinWidth:  360,
-		MinHeight: 240,
-		Floating:  a.settings.Bool(settings.KeyAlwaysOnTop),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("window: %w", err)
-	}
-	a.win = win
-	state.SetInvalidator(func() {
-		a.invalidate.Store(true)
-		platform.Wake()
+	a.g = giode.New(giode.Config{
+		Title:       "goplay",
+		Size:        image.Pt(960, 600),
+		MinSize:     image.Pt(360, 240),
+		Resizable:   true,
+		Frameless:   true,
+		Center:      true,
+		AlwaysOnTop: a.onTop,
+		Background:  colBackground,
+		Icon:        icon,
+		Renderer:    giode.RendererOpenGL,
+		Underlay:    a.drawVideo,
+		OnEvent:     a.windowEvent,
+		OnFileDrop:  a.dropped,
+		OnOpenURL:   a.openedURL,
+		OnContextAction: func(_ string, paths []string) {
+			a.whenReady(func() { a.openItems(paths, false) })
+		},
+		OnStartup: func() {
+			if runtime.GOOS == "linux" {
+				// Linux file managers find "Play with GoPlay" in the
+				// user's home; the other systems' installers add it.
+				a.g.InstallContextActions()
+			}
+		},
+		OnWindowStateChange: a.windowStateChanged,
+		OnShutdown:          a.shutdown,
 	})
 
 	if err := a.startPlayer(); err != nil {
-		win.Destroy()
 		return nil, err
 	}
-	g, err := gpu.New(platform.GPU())
-	if err != nil {
-		a.shutdownPlayer()
-		win.Destroy()
-		return nil, fmt.Errorf("gpu: %w", err)
-	}
-	a.gpu = g
 
 	setupTheme()
 	a.registerCommands()
 	a.applyKeyBindings()
 	a.ui = newUI(a)
-	a.installHandlers()
 
 	if len(files) > 0 {
-		a.Post(func() { a.openItems(files, false) })
+		a.starting = append(a.starting, func() { a.openItems(files, false) })
 	}
 	switch {
 	case len(commands) > 0 && len(files) > 0:
 		// Commands that act on the file wait for it to load.
 		a.startupCommands = commands
 	case len(commands) > 0:
-		a.Post(func() { a.runCommands(commands) })
+		a.starting = append(a.starting, func() { a.runCommands(commands) })
 	}
 	return a, nil
 }
@@ -164,8 +186,8 @@ func (a *App) loadPrefs() {
 	a.history = h
 }
 
-// startPlayer creates mpv with the user's settings and its OpenGL render
-// context in the window.
+// startPlayer creates mpv with the user's settings. Its render context
+// is made on the render thread, on the first frame (drawVideo).
 func (a *App) startPlayer() error {
 	var opts []player.Option
 	for _, o := range a.settings.MPVOptions() {
@@ -180,8 +202,9 @@ func (a *App) startPlayer() error {
 		LoadConfig: a.settings.Bool(settings.KeyMPVConf),
 		LogLevel:   a.settings.Get(settings.KeyLogLevel),
 		Wakeup: func() {
-			a.mpvEvents.Store(true)
-			platform.Wake()
+			if !a.mpvPending.Swap(true) {
+				a.g.Post(a.processPlayer)
+			}
 		},
 	})
 	var optErr *player.OptionError
@@ -189,23 +212,12 @@ func (a *App) startPlayer() error {
 	case p == nil:
 		return fmt.Errorf("mpv: %w", err)
 	case err != nil && asOptionError(err, &optErr):
-		a.Post(func() { a.toastError(optErr.Error()) })
+		a.starting = append(a.starting, func() { a.toastError(optErr.Error()) })
 	}
 	a.player = p
 	p.OnLog = a.appendLog
 	p.OnFileLoaded = a.fileLoaded
 	p.OnEndFile = a.fileEnded
-
-	rend, err := p.Handle().NewRenderContext(platform.GetProcAddress)
-	if err != nil {
-		p.Destroy()
-		return fmt.Errorf("mpv render: %w", err)
-	}
-	rend.SetUpdateCallback(func() {
-		a.newFrame.Store(true)
-		platform.Wake()
-	})
-	a.rend = rend
 	return nil
 }
 
@@ -217,159 +229,130 @@ func asOptionError(err error, target **player.OptionError) bool {
 	return ok
 }
 
-func (a *App) shutdownPlayer() {
-	if a.rend != nil {
-		a.rend.Free()
-		a.rend = nil
-	}
-	if a.player != nil {
-		a.player.Destroy()
-	}
-}
-
 // Post runs fn on the UI goroutine before the next frame. It is safe
 // from any goroutine and doesn't wait.
-func (a *App) Post(fn func()) {
-	a.postMu.Lock()
-	a.posted = append(a.posted, fn)
-	a.postMu.Unlock()
-	platform.Wake()
+func (a *App) Post(fn func()) { a.g.Post(fn) }
+
+// Run shows the window and runs until it closes; the process ends
+// with it.
+func (a *App) Run() error {
+	return a.g.Run(func() giode.Element { return elements.Raw(a.frame) })
 }
 
-func (a *App) runPosted() bool {
-	a.postMu.Lock()
-	fns := a.posted
-	a.posted = nil
-	a.postMu.Unlock()
+// processPlayer handles mpv's queued events.
+func (a *App) processPlayer() {
+	a.mpvPending.Store(false)
+	if a.player.Process() {
+		a.afterPlayerChange()
+		a.dirty = true
+	}
+}
+
+// windowEvent follows the window's size, for picture in picture and
+// fitting the window to a video.
+func (a *App) windowEvent(e event.Event) {
+	if c, ok := e.(gioapp.ConfigEvent); ok {
+		a.winSize = c.Config.Size
+	}
+}
+
+// windowStateChanged pauses playback while the window is minimized, if
+// the user asked for that, and resumes it after.
+func (a *App) windowStateChanged(s giode.WindowState) {
+	st := &a.player.State
+	switch {
+	case s == giode.WindowMinimized:
+		if a.settings.Bool(settings.KeyPauseMinimized) && !st.Idle && !st.Paused && !a.casting() {
+			a.player.SetPause(true)
+			a.pausedHidden = true
+		}
+	case a.pausedHidden:
+		a.pausedHidden = false
+		a.player.SetPause(false)
+	}
+	a.dirty = true
+}
+
+// openedURL opens what macOS hands the app: files opened with it from
+// Finder arrive as file:// URLs.
+func (a *App) openedURL(u *url.URL) {
+	item := u.String()
+	if u.Scheme == "file" {
+		item = u.Path
+	}
+	a.whenReady(func() { a.openItems([]string{item}, false) })
+}
+
+// whenReady runs fn now if the video output is ready, or once it is.
+func (a *App) whenReady(fn func()) {
+	if a.ready {
+		fn()
+		return
+	}
+	a.starting = append(a.starting, fn)
+}
+
+// drawVideo is the window's underlay: mpv draws the current video frame
+// into the window's framebuffer, before the UI is drawn over it. It runs
+// on the render thread with the window's OpenGL context current, where
+// the render context is made and used.
+func (a *App) drawVideo(t giode.GPUTarget) {
+	if a.rend == nil {
+		if a.rendFailed {
+			return
+		}
+		rend, err := a.player.Handle().NewRenderContext(mpv.GLProcAddress)
+		if err != nil {
+			a.rendFailed = true
+			a.appendLog("error", "render", err.Error())
+			a.Post(func() {
+				a.toastError("Couldn't start video output: " + err.Error())
+				a.runStarting()
+			})
+			return
+		}
+		rend.SetUpdateCallback(a.g.Invalidate)
+		a.rend = rend
+		a.Post(a.runStarting)
+	}
+	a.rend.Update()
+	if !a.showVideo.Load() || t.Size.X <= 0 || t.Size.Y <= 0 {
+		return
+	}
+	// GL's origin is the bottom left, the window's the top left.
+	if err := a.rend.Render(int(t.Framebuffer), t.Size.X, t.Size.Y, true); err != nil {
+		a.appendLog("error", "render", err.Error())
+	}
+}
+
+// runStarting runs what waited for the video output.
+func (a *App) runStarting() {
+	a.ready = true
+	fns := a.starting
+	a.starting = nil
 	for _, fn := range fns {
 		fn()
 	}
-	return len(fns) > 0
+	a.dirty = true
 }
 
-// installHandlers connects the window's events.
-func (a *App) installHandlers() {
-	w := a.win
-	w.OnKey = a.handleKey
-	w.OnDrop = func(paths []string) { a.Post(func() { a.dropped(paths) }) }
-	w.OnClose = func() bool {
-		a.quitting = true
-		return true
-	}
-	w.OnFocus = func(bool) { a.dirty = true }
-	w.OnRefresh = func() { a.render() }
-	w.CanDrag = a.canDragAt
-}
-
-// Run shows the window and runs until it closes.
-func (a *App) Run() error {
-	a.win.Show()
-	defer a.shutdown()
-	for !a.win.ShouldClose() {
-		a.win.Wait(a.nextWakeup())
-		a.step()
-	}
-	return nil
-}
-
-// step handles everything that happened since the last one, and draws a
-// frame if anything changed.
-func (a *App) step() {
-	changed := a.runPosted()
-	for _, f := range platform.TakeOpenedFiles() {
-		a.openItems([]string{f}, false)
-		changed = true
-	}
-	if a.mpvEvents.Swap(false) && a.player.Process() {
-		changed = true
-		a.afterPlayerChange()
-	}
-	if a.invalidate.Swap(false) {
-		changed = true
-	}
-	frame := false
-	if a.newFrame.Swap(false) && a.rend != nil {
-		frame = a.rend.Update()
-	}
-	if a.win.TakeDirty() || a.dirty || a.timersDue() {
-		changed = true
-	}
-	a.dirty = false
-	if changed || frame {
-		a.render()
-	}
-}
-
-// nextWakeup is when the loop must run even without input: an
-// animation's next frame, the controls hiding, the OSD fading.
-func (a *App) nextWakeup() time.Time {
-	var next time.Time
-	consider := func(t time.Time) {
-		if !t.IsZero() && (next.IsZero() || t.Before(next)) {
-			next = t
-		}
-	}
-	if t, ok := a.win.Wakeup(); ok {
-		consider(t)
-	}
-	consider(a.ui.nextTimer())
-	if !next.IsZero() && time.Until(next) < 0 {
-		return time.Now()
-	}
-	return next
-}
-
-func (a *App) timersDue() bool {
-	t := a.ui.nextTimer()
-	return !t.IsZero() && !time.Now().Before(t)
-}
-
-// render draws the video frame, then the UI over it, and presents.
-func (a *App) render() {
-	fb := a.win.FramebufferSize()
-	if fb.X <= 0 || fb.Y <= 0 || a.win.Minimized() {
-		return
-	}
-	scale := a.win.Scale()
-	a.ui.beginFrame(fb, scale)
+// frame lays out one frame of the UI.
+func (a *App) frame(gtx layout.Context) layout.Dimensions {
+	fb := gtx.Constraints.Max
+	a.ui.beginFrame(fb, gtx.Metric.PxPerDp)
 	a.updateVideoMargins(fb)
-
 	st := &a.player.State
-	if a.rend != nil && !st.Idle && !a.casting() {
-		if err := a.rend.Render(0, fb.X, fb.Y, true); err != nil {
-			a.appendLog("error", "render", err.Error())
-		}
-	} else {
-		a.gpu.Clear(color.NRGBA{R: 0x09, G: 0x09, B: 0x0b, A: 0xff})
-	}
-
-	a.ops.Reset()
-	gtx := layout.Context{
-		Ops:         &a.ops,
-		Now:         time.Now(),
-		Source:      a.win.Router.Source(),
-		Metric:      unit.Metric{PxPerDp: scale, PxPerSp: scale},
-		Constraints: layout.Exact(fb),
-	}
-	elements.BeginFrame()
-	elements.SetWindowSize(fb)
-	elements.SetMetric(gtx.Metric)
+	a.showVideo.Store(!st.Idle && !a.casting())
+	a.handleKeys(gtx)
 	a.ui.layout(gtx)
-	elements.DrainPortals(gtx)
-	elements.DispatchBack(gtx)
-	if elements.RunAfterLayout() {
-		a.dirty = true
+
+	if a.dirty {
+		a.dirty = false
+		gtx.Execute(op.InvalidateCmd{})
+	} else if t := a.ui.nextTimer(); !t.IsZero() {
+		gtx.Execute(op.InvalidateCmd{At: t})
 	}
-	if err := a.gpu.Frame(gtx.Ops, gpu.OpenGLRenderTarget{}, fb); err != nil {
-		a.appendLog("error", "gpu", err.Error())
-	}
-	a.win.Router.Frame(gtx.Ops)
-	elements.EndFrame()
-	a.win.Swap()
-	if a.rend != nil {
-		a.rend.ReportSwap()
-	}
-	a.win.AfterFrame()
+	return layout.Dimensions{Size: fb}
 }
 
 // updateVideoMargins keeps mpv's picture out of the title bar's and
@@ -397,9 +380,22 @@ func (a *App) updateVideoMargins(fb image.Point) {
 	}
 }
 
+// handleKeys takes the keys nothing in the UI took: shortcuts, and
+// otherwise mpv's own bindings.
+func (a *App) handleKeys(gtx layout.Context) {
+	for {
+		ev, ok := gtx.Event(key.Filter{Optional: key.ModCtrl | key.ModShift | key.ModAlt | key.ModSuper | key.ModCommand})
+		if !ok {
+			return
+		}
+		if e, ok := ev.(key.Event); ok && e.State == key.Press && a.handleKey(e) {
+			a.dirty = true
+		}
+	}
+}
+
 // handleKey runs the shortcut for a key press. It reports whether the
-// key was used; unused keys go to the UI (and from there, if nothing
-// takes them, to mpv's own bindings).
+// key was used.
 func (a *App) handleKey(e key.Event) bool {
 	if a.ui.capturingKey() {
 		a.ui.captureKey(e)
@@ -413,7 +409,6 @@ func (a *App) handleKey(e key.Event) bool {
 	}
 	if act := a.actions.Lookup(e); act != nil {
 		a.actions.Run(act.ID)
-		a.dirty = true
 		return true
 	}
 	if a.settings.Bool(settings.KeyPassKeys) && !a.player.State.Idle && isPlainKey(e) {
@@ -439,7 +434,7 @@ func (a *App) escape() bool {
 	switch {
 	case a.ui.closeTopmost():
 		return true
-	case a.win.Fullscreen():
+	case a.g.Fullscreen():
 		a.setFullscreen(false)
 		return true
 	case a.ui.pip:
@@ -454,12 +449,15 @@ func (a *App) escape() bool {
 func (a *App) afterPlayerChange() {
 	st := &a.player.State
 	playing := !st.Idle && !st.Paused && !a.casting()
-	platform.KeepAwake(playing && st.HasVideo())
+	a.g.KeepScreenOn(playing && st.HasVideo())
 	title := "goplay"
 	if !st.Idle && st.Title != "" {
 		title = st.Title + " — goplay"
 	}
-	a.win.SetTitle(title)
+	if title != a.title {
+		a.title = title
+		a.g.Window().Option(gioapp.Title(title))
+	}
 	if !st.Idle && st.Path != "" {
 		a.lastPath, a.lastTitle = st.Path, st.Title
 	}
@@ -537,8 +535,9 @@ func (a *App) logLines() []string {
 	return append([]string(nil), a.log...)
 }
 
-// shutdown saves state and releases everything, in the order mpv
-// requires (render context before the core).
+// shutdown saves state once the window has closed. mpv is left to the
+// process's exit: its render context belonged to the window's GL
+// context, which is gone, and the core mustn't outlive it.
 func (a *App) shutdown() {
 	st := &a.player.State
 	if a.lastPath != "" && st.Duration > 0 {
@@ -550,11 +549,7 @@ func (a *App) shutdown() {
 	}
 	a.settings.Flush()
 	a.stopCasting()
-	platform.KeepAwake(false)
 	a.player.SaveResumePosition()
-	a.shutdownPlayer()
-	a.gpu.Release()
-	a.win.Destroy()
 }
 
 // runCommands runs commands by ID (from --run).
@@ -569,8 +564,23 @@ func (a *App) runCommands(ids []string) {
 	a.dirty = true
 }
 
-// SetIcon sets the window icon.
-func (a *App) SetIcon(img image.Image) { a.win.SetIcon(img) }
+// Quit closes the window, which ends the app.
+func (a *App) Quit() { a.g.Close() }
 
-// Quit closes the window, which ends Run.
-func (a *App) Quit() { a.win.Close() }
+// windowCtl lets the title bar drive the window.
+type windowCtl struct{ a *App }
+
+func (w windowCtl) Minimize() { w.a.g.Minimize() }
+func (w windowCtl) ToggleMaximize() {
+	if w.a.ui.pip {
+		w.a.togglePiP()
+	}
+	if w.a.g.Fullscreen() {
+		w.a.setFullscreen(false)
+		return
+	}
+	w.a.g.ToggleMaximize()
+}
+func (w windowCtl) Close()          { w.a.Quit() }
+func (w windowCtl) Maximized() bool { return w.a.g.Maximized() || w.a.g.Fullscreen() }
+func (w windowCtl) Focused() bool   { return w.a.g.Focused() }

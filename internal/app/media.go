@@ -2,6 +2,8 @@ package app
 
 import (
 	"image"
+
+	gioapp "gioui.org/app"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -151,7 +153,12 @@ func (a *App) dropped(paths []string) {
 
 // openClipboard plays a link or path from the clipboard.
 func (a *App) openClipboard() {
-	text := strings.TrimSpace(a.win.Clipboard())
+	a.g.ReadClipboard(a.openText)
+}
+
+// openText plays the links or paths in text, one per line.
+func (a *App) openText(text string) {
+	text = strings.TrimSpace(text)
 	if text == "" {
 		a.toast("The clipboard is empty")
 		return
@@ -206,7 +213,7 @@ func (a *App) revealCurrent() {
 }
 
 func (a *App) copyCurrentPath() {
-	a.win.SetClipboard(a.player.State.Path)
+	a.g.SetClipboard(a.player.State.Path)
 	a.toast("Copied")
 }
 
@@ -305,7 +312,7 @@ func (a *App) applySetting(key string) {
 	v := a.settings.Get(key)
 	switch key {
 	case settings.KeyAlwaysOnTop:
-		a.win.SetFloating(v == "yes")
+		a.setOnTop(v == "yes")
 	case settings.KeyStereoView:
 		if a.stereo.layout != player.Layout2D {
 			a.stereo.view = player.StereoView(v)
@@ -340,61 +347,78 @@ func (a *App) setFullscreen(on bool) {
 	if a.ui.pip && on {
 		a.togglePiP()
 	}
-	a.win.SetFullscreen(on)
+	a.g.SetFullscreen(on)
 	a.dirty = true
 }
 
-// togglePiP shrinks the window to a small always-on-top player in the
-// corner of the screen, or brings it back.
+// setOnTop keeps the window above others, or not.
+func (a *App) setOnTop(on bool) {
+	a.onTop = on
+	a.g.Window().Option(gioapp.TopMost(on))
+}
+
+// pipWidth is the picture-in-picture window's width in dp. Giode can't
+// move a window or tell the screen's size yet, so it stays where it is
+// rather than going to a corner (docs/giode-gaps.md).
+const pipWidth = 420
+
+// togglePiP shrinks the window to a small always-on-top player, or
+// brings it back.
 func (a *App) togglePiP() {
 	u := a.ui
 	if u.pip {
 		u.pip = false
-		a.win.SetFloating(u.pipWasFloating)
-		a.win.SetBounds(u.pipRestore)
+		a.setOnTop(u.pipWasOnTop)
+		a.g.SetSize(u.pipRestore.X, u.pipRestore.Y)
 		return
 	}
-	if a.win.Fullscreen() {
-		a.win.SetFullscreen(false)
+	if a.g.Fullscreen() {
+		a.g.SetFullscreen(false)
 	}
-	if a.win.Maximized() {
-		a.win.SetMaximized(false)
+	if a.g.Maximized() {
+		a.g.Unmaximize()
 	}
 	u.pip = true
-	u.pipRestore = a.win.Bounds()
-	u.pipWasFloating = a.win.Floating()
-	work := a.win.WorkArea()
-	w := work.Dx() / 4
-	h := w * 9 / 16
+	u.pipRestore = a.windowSizeDp()
+	u.pipWasOnTop = a.onTop
+	w, h := pipWidth, pipWidth*9/16
 	if st := &a.player.State; st.VideoW > 0 && st.VideoH > 0 {
 		h = w * st.VideoH / st.VideoW
 	}
-	margin := work.Dx() / 60
-	r := image.Rect(work.Max.X-w-margin, work.Max.Y-h-margin, work.Max.X-margin, work.Max.Y-margin)
-	a.win.SetFloating(true)
-	a.win.SetBounds(r)
+	a.setOnTop(true)
+	a.g.SetSize(w, h)
 }
+
+// windowSizeDp is the window's size in dp.
+func (a *App) windowSizeDp() image.Point {
+	s := a.ui.scale
+	if s <= 0 {
+		s = 1
+	}
+	return image.Pt(int(float32(a.winSize.X)/s+0.5), int(float32(a.winSize.Y)/s+0.5))
+}
+
+// Without the screen's size (docs/giode-gaps.md), sizeToVideo keeps the
+// window within this many dp.
+const maxFitW, maxFitH = 1280, 800
 
 // sizeToVideo fits the window to the video when a new one starts,
 // leaving room for the bars around it.
 func (a *App) sizeToVideo() {
 	st := &a.player.State
 	if !a.settings.Bool(settings.KeyResizeToVideo) || st.VideoW <= 0 || st.VideoH <= 0 ||
-		a.win.Maximized() || a.win.Fullscreen() || a.ui.pip {
+		a.g.Maximized() || a.g.Fullscreen() || a.ui.pip {
 		return
 	}
-	work := a.win.WorkArea()
-	if work.Empty() {
-		return
+	// One video pixel per screen pixel, in dp.
+	s := a.ui.scale
+	if s <= 0 {
+		s = 1
 	}
-	// Window sizes are in screen coordinates, which are points on a
-	// Retina Mac: one video pixel per screen pixel either way.
-	pps := a.win.ScreenToPx(1)
-	chrome := int(float32(a.ui.titleHeightPx()+a.ui.barHeightPx()) / pps)
-	maxW, maxH := work.Dx()*85/100, work.Dy()*85/100-chrome
-	w, h := float32(st.VideoW)/pps, float32(st.VideoH)/pps
-	if f := min(float32(maxW)/w, float32(maxH)/h, 1); f < 1 {
+	chrome := a.ui.titleHeightDp() + controlBarH
+	w, h := float32(st.VideoW)/s, float32(st.VideoH)/s
+	if f := min(float32(maxFitW)/w, float32(maxFitH-chrome)/h, 1); f < 1 {
 		w, h = w*f, h*f
 	}
-	a.win.SetSize(max(int(w), 480), max(int(h), 270)+chrome)
+	a.g.SetSize(max(int(w), 480), max(int(h), 270)+chrome)
 }

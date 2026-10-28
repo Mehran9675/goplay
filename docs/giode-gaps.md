@@ -1,187 +1,135 @@
 # What goplay needs from Giode and the Giode CLI
 
-goplay is built on Giode (github.com/mehran9675/giode) and is set up for the
-Giode CLI (github.com/Mehran9675/giode-cli). Where either was missing something
-goplay needed, goplay doesn't work around it; this file describes what's
-missing instead. Things only a video player would ever need are in goplay
-itself and listed at the end.
+goplay runs on `giode.App` (github.com/mehran9675/giode) and is built with the
+Giode CLI (github.com/Mehran9675/giode-cli). Where either is missing something
+goplay needs, goplay doesn't work around it; this file describes what's
+missing. Things only a video player would ever need are in goplay itself and
+listed at the end.
+
+Everything the previous version of this file asked for has landed: the
+underlay, `ui.Frame` and the `host` package, the menu and tooltip fixes, menu
+shortcuts and check items, native library bundling, file types, context
+actions, cgo on Windows and CI setup hooks. goplay now uses them, and its own
+GLFW host and packaging scripts are gone.
 
 ## Giode
 
-### 1. Drawing GPU content under the UI in `giode.App` (the main one)
+### 1. File drop on macOS and Linux
 
-A video player needs each video frame drawn into the window, with the UI on
-top, without copying frames off the GPU. libmpv (like most video, 3D and map
-engines) renders with OpenGL into a framebuffer the host provides.
+`Config.OnFileDrop` only works on Windows. Dropping videos, folders and
+subtitle files onto the player is how many people open them, especially on
+macOS, goplay's main platform. With the GLFW host it worked everywhere; now it
+works only on Windows.
 
-`giode.App` owns the window and its GPU context, and there's no way to draw
-anything into the frame before Giode's UI. On macOS Gio renders with Metal, so
-an OpenGL engine can't even share the context.
+- **macOS**: register the window's view for `NSPasteboardTypeFileURL`
+  (`registerForDraggedTypes:`) and deliver `performDragOperation:`'s URLs.
+- **Linux**: Gio's event loop consumes the X11 (XDND) and Wayland
+  (`wl_data_device`) drag-and-drop messages, so this needs Gio changes.
 
-**What goplay does instead:** it uses Giode the documented "GLFW and embedded
-windows" way. It creates a GLFW window with an OpenGL (ES) context, lets libmpv
-draw the frame, then has Gio's `gpu` package draw the Giode UI over it.
+Drag enter/leave events, for highlighting a drop target, would help too.
 
-**What's needed:** an `App` option for a caller-drawn layer under the UI, for
-example:
+### 2. Window position and the screen's size
 
-```go
-giode.Config{
-	// Ask for an OpenGL (ES) context on every platform (Metal is the
-	// default on macOS) and call this before each UI frame, with the
-	// context current.
-	Underlay: func(fb giode.GLFramebuffer) { mpvRender(fb.ID, fb.Width, fb.Height) },
-}
-app.Invalidate() // from any goroutine: a new video frame is ready
-```
+Picture in picture shrinks the window and keeps it on top, but can't move it
+to a corner of the screen: giode.App can't place a window or report the
+screen's work area. "Resize the window to fit each video" can't cap the size
+at the screen's either, so goplay uses a fixed 1280×800 dp limit.
 
-Metal and Direct3D variants (a texture handle to draw into) would let engines
-keep their native APIs. With this, goplay could drop its GLFW window and use
-`App` directly.
+**Suggested:** `App.SetPosition(x, y)` (or `MoveTo(corner, margin)`), and
+`App.Screen()` returning the current monitor's bounds and work area in dp.
 
-**What a custom host loses today.** These are `App` methods, so a GLFW-hosted
-app can't use them and has to provide its own:
+### 3. Minimized windows on Windows
 
-| `App` feature | goplay's replacement |
-| --- | --- |
-| `Post`, `RunOnUI` | its own queue, woken with `glfw.PostEmptyEvent` |
-| `SetClipboard`, `ReadClipboard` | GLFW's clipboard, wired to Gio's router |
-| `Config.OnFileDrop`, `NativeHandle` | GLFW's drop callback and native accessors |
-| `KeepScreenOn` | its own per-OS code (Windows, macOS, Linux) |
-| `TitleBar` window state, `Frameless`, resize borders | its own maximize, fullscreen, drag and edge resizing |
-| single instance, context actions, tray, system theme, notifications, MCP | not available |
+Gio's Windows backend never reports `app.Minimized` in a `ConfigEvent`, so
+`OnWindowStateChange` never sees `WindowMinimized` there. `OnBackground`,
+documented as running "on desktops when the window is minimized", doesn't run
+on desktop at all (only Android and iOS call it). goplay's "Pause when
+minimized" uses `OnWindowStateChange` and works only where Gio reports the
+state.
 
-Package-level versions of `KeepScreenOn`, the clipboard and single-instance
-(taking a native window handle where needed) would help any custom host.
+**Suggested:** report `Minimized` from `WM_SIZE`/`SIZE_MINIMIZED` (and restore
+on `SIZE_RESTORED`) in the patched Gio, and call `OnBackground`/`OnForeground`
+from window state on desktops as the doc says.
 
-### 2. One function for a custom host's frame
+### 4. Always on top at run time
 
-`docs/low-level.md` shows a custom render loop, but the example leaves out
-steps components depend on: `elements.BeginFrame`, `SetMetric`,
-`DrainPortals`, `DispatchBack`, `RunAfterLayout`, `EndFrame`, and
-`state.SetInvalidator` so a `State` or toast set from another goroutine can
-wake the loop. Leaving any out makes some component quietly misbehave
-(portals, keyed state, toasts). A single exported helper would keep custom
-hosts in step with `App`:
+`Config.AlwaysOnTop` only applies at startup. goplay toggles it with
+`App.Window().Option(app.TopMost(on))`, which works but goes around giode.App.
+`App.SetAlwaysOnTop(bool)` and `App.AlwaysOnTop()` would match `SetFullscreen`
+and keep giode's own state right.
 
-```go
-// Frame lays out one Giode frame into gtx the way App does.
-func Frame(gtx layout.Context, view Element) (needsAnotherFrame bool)
-```
+### 5. The underlay's GL context
 
-### 3. The root package pulls in Gio's window layer
+- **Function lookup.** OpenGL engines in `Config.Underlay` need the context's
+  `GetProcAddress` (libmpv's render API asks for one). goplay resolves it
+  itself (`internal/mpv/glproc.go`: ANGLE's `eglGetProcAddress` on Windows,
+  EGL on Linux, `dlsym` on macOS), which every OpenGL engine would repeat.
+  `GPUTarget` could carry a `GetProcAddress func(name string) unsafe.Pointer`.
+- **Teardown.** An engine's GL resources must be freed on the render thread
+  with the context current, before the window's context goes away
+  (`mpv_render_context_free` must also run before the mpv core is
+  destroyed). There's no callback for that, so goplay lets the process exit
+  with mpv alive. **Suggested:** `Config.UnderlayRelease func()`, called on
+  the render thread before the context is destroyed.
 
-The convenient names (`giode.Box`, `giode.Button`, `giode.Styles`, …) live in
-the root package, which also holds `App` and so imports `gioui.org/app`. A
-GLFW-hosted app that uses those names links Gio's windowing code it never
-uses. That means extra Linux build dependencies, a bigger binary, and on macOS
-Gio's app package starting up alongside GLFW's `NSApplication`. goplay imports
-the component packages directly instead.
+### 6. MCP
 
-**Suggested:** move `App` to a subpackage (`giode/app`), or add a re-export
-package without it (`giode/ui`), so custom hosts can use the short names.
+goplay is tested with giode's MCP server, which found several of the problems
+above, but:
 
-### 4. Bugs: menus fill the window, tooltips cover their trigger
-
-- **Menu panels are as wide as the window.** `measureWidth` lays each row out
-  with `width == 0`, as `Row{Align: Center, Wrap: NoWrap}` holding a label
-  `Box{FlexGrow: 1}`. A no-wrap row with a growing child takes the full
-  `Constraints.Max.X` even when nothing else needs the space. The wrapping
-  row hugs its content. In measurement the label must not grow: drop
-  `FlexGrow` while `r.width == 0`, as is already done for `Width`. Or make
-  no-wrap rows hug like wrapping rows when the free space is only the
-  constraint. This affects every menu and submenu, not just goplay's;
-  Giode's tests don't catch it because they use a 400 px window.
-  Reproduce: measure `Row(Styles{Wrap: WrapNoWrap}, Box(Styles{FlexGrow: 1},
-  Text("Play")))` with `Max.X = 1000`; it reports 1000.
-- **Tooltips flip onto the control they describe.** `Tooltip.Layout` anchors
-  the panel at the trigger's bottom edge plus 6 dp. When that overflows the
-  window, `kit.ClampPos` flips it to `anchor.Y - size.Y`. That point is still
-  below the trigger's top, so the tooltip covers the button. For a control
-  bar at the bottom of the window, that happens on every button. Flipping
-  needs the trigger's top: put the panel at `trigger.Y - 6dp - size.Y`.
-  `RegisterPortal` could take the anchor's rectangle, or Tooltip could take
-  a placement (`Above`, `Below`, `Auto`), with `Auto` flipping around the
-  trigger.
-
-### 5. Smaller component gaps
-
-- **TitleBar has no `Styles(st)` setter.** Button, IconButton and Drawer have
-  one. goplay's bar is solid in a window and a transparent fade over
-  fullscreen video. goplay creates the bar transparent and puts its own
-  background behind it.
-- **Switch: no knob color.** The knob is white, so a light "on" track (white,
-  in a monochrome theme) hides it. A `BorderColor` or `Color` for the knob
-  would fix it; goplay uses green for "on".
-- **Menu: no shortcut column.** Desktop menus show each item's shortcut
-  right-aligned ("Open File… Ctrl+O"). An `ItemWithShortcut(label,
-  shortcut, fn)` or `Shortcut(text)` on items.
-- **Menu: no check or radio items.** goplay shows the current track or speed
-  with a check icon (`IconItem` with a "check" or blank icon). A native
-  `CheckItem(label, checked, fn)` and radio groups would be clearer and
-  accessible.
-- **Toaster: no inset.** Placement is relative to the window edges, so toasts
-  can sit over a custom title bar or control bar. A `Margin`/`Inset` setting
-  would let apps keep them clear.
+- **`screenshot` is blank** (white) with `Underlay` and `RendererOpenGL`. It
+  should read the window's framebuffer after the frame, video included.
+- **No pointer or keyboard tools** besides clicks: hover (tooltips, a seek
+  bar's preview, a control bar that shows on hover), drag (sliders, seek
+  bars), right-click (context menus) and key presses (shortcuts) can't be
+  tested. Windows messages posted to the window don't reach Gio either,
+  since it reads pointer input. A `ui_pointer` tool (move, press and release
+  with a button, at a node or at coordinates) and `ui_key` (a key with
+  modifiers) would cover them.
 
 ## Giode CLI
 
-### 1. Bundling native libraries
+### 1. Windows DLL imports are never found (bug)
 
-goplay links libmpv with cgo. libmpv is a shared library with dozens of its
-own (FFmpeg, libass, …). `giode build` builds the binary, but no target
-bundles those libraries:
+`native.Collect` reads a Windows binary's imports with Go's
+`(*pe.File).ImportedLibraries`, which Go's standard library has never
+implemented: it always returns nil. So no imported DLL is bundled, and no
+missing one is warned about. goplay's exe imports `libmpv-2.dll`, and nothing
+bundled it.
 
-- **macOS `.app`/`.dmg`**: copy the dylibs into `Contents/Frameworks`, rewrite
-  their install names and the binary's rpath (what `dylibbundler` does), and
-  sign them with the app.
-- **Windows (`windows`, `windows-installer`, `msix`)**: put the DLLs next to the
-  executable in the installer and package.
-- **Linux (`appimage`, `flatpak`, `deb`, `rpm`)**: bundle them in the AppImage or
-  Flatpak, or declare them as package dependencies (`libmpv2`) for deb and
-  rpm.
+**Fix:** collect the DLL names from `(*pe.File).ImportedSymbols()`, whose
+entries are `symbol:dll`, or read the import directory. Until then goplay
+lists its DLLs in `[native.windows] libraries`, which only works because the
+libmpv it uses (shinchiro's build) is a single self-contained DLL. MSYS2's
+libmpv, with dozens of dependencies, can't be bundled.
 
-A `[native]` section listing libraries (or finding them with
-`otool`/`ldd`/`objdump`) would cover any cgo app with shared libraries.
+### 2. Paths in giode.toml
 
-Until then, `scripts/package.sh` does this for goplay's release builds; it
-goes away once `giode build` can.
+`[native.windows] libraries` and `search` take fixed paths. ANGLE lives in a
+different place on every machine (an Edge, Chrome or VS Code install, MSYS2's
+`angleproject`), so goplay's build scripts copy it to `build/native` first.
+Environment variables (`$MSYSTEM_PREFIX/bin/libEGL.dll`) or globs in these
+paths would remove that step. With `renderer = "opengl"` the CLI could also
+find and bundle ANGLE itself, since `RendererOpenGL` requires it on Windows.
 
-### 2. cgo on Windows
+### 3. The version in ldflags
 
-The README's table says Windows builds need "nothing extra: Gio doesn't need
-cgo on Windows". A cgo app needs a C compiler and pkg-config for the target:
-a `[windows] cc = "x86_64-w64-mingw32-gcc"` (and `pkg_config_path`) setting,
-and `giode doctor` checking them.
+`$GIODE_VERSION` sets `app.version`, but `app.ldflags` can't refer to it, so
+an app's own version string (goplay's About box) doesn't follow the release
+tag. goplay's CI rewrites both (`scripts/ci-version.sh`). A `{version}`
+placeholder in `app.ldflags`, or the CLI setting a variable the app can read
+(`-X github.com/mehran9675/giode.AppVersion=...`), would fix it.
 
-### 3. File associations
+### 4. CI for ARM and file names per CPU
 
-A video player must appear in "Open with" for video files:
-
-- **macOS**: `CFBundleDocumentTypes` (and `UTImportedTypeDeclarations`) in
-  Info.plist. `[ios.plist]` takes arbitrary keys; macOS needs the same
-  (`[macos.plist]`).
-- **Windows installer and MSIX**: registering file types and the "Open with"
-  entry.
-- **Linux**: `MimeType=` in the `.desktop` file.
-
-A cross-platform `[[file_types]]` list (extensions, MIME types, a name, a role)
-would generate all three.
-
-A context menu entry ("Play with GoPlay") fits next to that, as an
-`[[actions]]` list with a label, the file types and the command line. It
-would make an `NSServices` entry on macOS (the app answers it from its
-services provider), a `shell` verb under `SystemFileAssociations` in the
-Windows installer, and Dolphin and Nemo action files on Linux.
-`scripts/package.sh`, `scripts/goplay.iss` and `scripts/linux/` do this for
-goplay until then.
-
-### 4. `giode ci` with system packages
-
-The generated workflow builds pure-Go apps. cgo apps need packages installed
-first (Homebrew, apt, MSYS2). A `[ci] setup = { macos = "brew install mpv",
-linux = "...", windows = "..." }` hook would let `giode ci` build goplay.
-goplay has its own workflow in `.github/workflows/build.yml` until then.
+`giode ci` builds x64 only, in MSYS2's MINGW64. goplay's releases also have
+Linux and Windows ARM64 builds (GitHub's `ubuntu-24.04-arm` and
+`windows-11-arm` runners, MSYS2's CLANGARM64), so goplay keeps its own
+workflow. Also, `dmg` and `windows-installer` name their output without the
+CPU (`goplay-1.1.0.dmg`, `goplay-1.1.0-setup.exe`), so two builds of one
+release collide; goplay's CI renames them (`scripts/ci-collect.sh`).
+**Suggested:** an `arch` list in `[ci]`, and the CPU in every package's name
+(the `.deb`, `.rpm` and AppImage already have it).
 
 ## In goplay itself (player-specific)
 
@@ -190,8 +138,7 @@ proposed for Giode:
 
 - the timeline (`internal/app/view_seek.go`): buffered ranges, chapter marks,
   A-B loop, a hover preview of time and chapter, keyframe seeks while dragging
-- the GLFW host (`internal/platform`): needed only because of Giode gap 1
 - 3D and 360° projection, casting (Chromecast, DLNA), the mpv binding
 
-Not Giode or the CLI, but worth knowing: GLFW doesn't report media keys
+Not Giode or the CLI, but worth knowing: Gio doesn't report media keys
 (play/pause on keyboards and headsets), so goplay can't react to them yet.
