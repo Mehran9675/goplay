@@ -17,7 +17,12 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install libmpv and FFmpeg
-        run: brew install mpv pkg-config ffmpeg
+        run: |
+          brew install mpv pkg-config ffmpeg
+          # Homebrew's mpv.pc can name a Cellar folder that isn't there;
+          # its stable prefix always is.
+          echo "CGO_LDFLAGS=-L$(brew --prefix)/lib" >> "$GITHUB_ENV"
+          echo "CGO_CFLAGS=-I$(brew --prefix)/include" >> "$GITHUB_ENV"
       - name: Make test videos
         run: scripts/test-media.sh "$RUNNER_TEMP/media"
       - name: Vet
@@ -80,14 +85,14 @@ jobs:
           go-version-file: go.mod
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           path-type: inherit
           update: true
           install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-pkgconf
-            mingw-w64-x86_64-mpv
-            mingw-w64-x86_64-ffmpeg
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-mpv
+            mingw-w64-ucrt-x86_64-ffmpeg
       - name: Make test videos
         run: scripts/test-media.sh "$RUNNER_TEMP/media"
       - name: Vet

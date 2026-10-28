@@ -240,6 +240,14 @@ export CGO_ENABLED=1
 export CC="$cc"
 export PKG_CONFIG="$pkgconfig"
 
+# Homebrew's mpv.pc can name a versioned Cellar folder that no longer
+# exists after an upgrade; its stable prefix always does.
+if [ "$os" = Darwin ] && command -v brew >/dev/null 2>&1; then
+	prefix="$(brew --prefix)"
+	export CGO_LDFLAGS="${CGO_LDFLAGS:+$CGO_LDFLAGS }-L$prefix/lib"
+	export CGO_CFLAGS="${CGO_CFLAGS:+$CGO_CFLAGS }-I$prefix/include"
+fi
+
 # A libmpv outside the system library path gets an rpath, so the binary
 # finds it at runtime without LD_LIBRARY_PATH/DYLD_LIBRARY_PATH.
 case "${libdir:-}" in
