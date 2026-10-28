@@ -28,6 +28,7 @@ const (
 	KeyVRInvert        = "vr_invert"
 	KeyCastConvert     = "cast_convert"
 	KeyCastSubtitles   = "cast_subtitles"
+	KeyMediaServers    = "media_servers"
 	KeyPassKeys        = "pass_keys"
 	KeyMPVConf         = "mpv_conf"
 	KeyLogLevel        = "log_level"
@@ -277,6 +278,9 @@ var Defs = []Def{
 	{Key: KeyCastConvert, Section: "Casting", Label: "Convert files the TV can't play", Kind: Toggle, Default: "yes",
 		Help: "Repackages MKV and other files on the fly so Chromecast and DLNA devices accept them. Needs FFmpeg."},
 	{Key: KeyCastSubtitles, Section: "Casting", Label: "Send subtitles", Kind: Toggle, Default: "yes"},
+	{Key: KeyMediaServers, Section: "Casting", Label: "Media server addresses", Kind: Text, Default: "", Lines: 3,
+		Help: "Media servers that aren't found by themselves, one per line: an IP address or name (192.168.1.20), " +
+			"with the port of its web page for Emby or Jellyfin (192.168.1.20:8096), or the URL of its UPnP description."},
 
 	// Advanced
 	{Key: "cache", Section: "Advanced", Label: "Network cache", Kind: Choice, Default: "auto", MPV: "cache",

@@ -29,17 +29,22 @@ const (
 )
 
 func discoverDLNA(ctx context.Context, report func(Device)) {
-	ssdpSearch(ctx, rendererType, func(loc string) {
+	ssdpSearch(ctx, ssdpAddr, rendererType, func(loc string) {
 		if d, err := describeRenderer(ctx, loc); err == nil {
 			report(d)
 		}
 	})
 }
 
-// ssdpSearch asks the network for UPnP devices of type st every few
-// seconds until ctx ends, calling found on its own goroutine with each
-// new device's description URL.
-func ssdpSearch(ctx context.Context, st string, found func(location string)) {
+// ssdpSearch asks for UPnP devices of type st every few seconds until
+// ctx ends, calling found on its own goroutine with each new device's
+// description URL. dst is the multicast group (ssdpAddr), or one
+// device's address and SSDP port to ask it alone.
+func ssdpSearch(ctx context.Context, dst, st string, found func(location string)) {
+	to, err := net.ResolveUDPAddr("udp4", dst)
+	if err != nil {
+		return
+	}
 	conn, err := net.ListenPacket("udp4", ":0")
 	if err != nil {
 		return
@@ -49,13 +54,12 @@ func ssdpSearch(ctx context.Context, st string, found func(location string)) {
 		<-ctx.Done()
 		conn.Close()
 	}()
-	dst, _ := net.ResolveUDPAddr("udp4", ssdpAddr)
-	search := []byte("M-SEARCH * HTTP/1.1\r\nHOST: " + ssdpAddr + "\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\nST: " + st + "\r\n\r\n")
+	search := []byte("M-SEARCH * HTTP/1.1\r\nHOST: " + dst + "\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\nST: " + st + "\r\n\r\n")
 	go func() {
 		t := time.NewTicker(4 * time.Second)
 		defer t.Stop()
 		for {
-			conn.WriteTo(search, dst)
+			conn.WriteTo(search, to)
 			select {
 			case <-ctx.Done():
 				return
