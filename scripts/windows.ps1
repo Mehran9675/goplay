@@ -244,6 +244,8 @@ Push-Location $root
 try {
     # Windows PowerShell drops empty arguments, so -ldflags is only passed
     # when set.
+    $version = (& git -C $root describe --tags --always --dirty 2>$null)
+    if ($version) { $ldflags = "$ldflags -X github.com/mehran9675/goplay/internal/app.Version=$version".Trim() }
     $buildArgs = @('build')
     if ($ldflags) { $buildArgs += @('-ldflags', $ldflags) }
     & go @buildArgs -o $exe .

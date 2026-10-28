@@ -1,0 +1,32 @@
+# Project file for the giode CLI (github.com/Mehran9675/giode-cli).
+#
+# goplay links libmpv with cgo, so `giode build` can produce the binary,
+# but the CLI can't yet bundle libmpv and its libraries into the .app,
+# .dmg, installer or AppImage; see docs/giode-gaps.md. Until then,
+# build.sh / build.bat produce runnable builds.
+
+[app]
+name = "goplay"
+id = "com.mehran9675.goplay"
+version = "0.2.0"
+build = 1
+icon = "assets/icon.png"
+package = "."
+publisher = "Mehran Zahiroddini"
+description = "A fast, beautiful video player that plays almost anything."
+website = "https://github.com/Mehran9675/goplay"
+ldflags = "-X github.com/mehran9675/goplay/internal/app.Version=0.2.0"
+
+[macos]
+min_os = 11
+
+[windows]
+arch = "amd64"
+
+[windows.installer]
+per_machine = false
+desktop_shortcut = true
+
+[linux]
+categories = ["AudioVideo", "Video", "Player"]
+description = "A video player built on mpv: hardware decoding, subtitles, 3D and 360° video, casting to Chromecast and DLNA."

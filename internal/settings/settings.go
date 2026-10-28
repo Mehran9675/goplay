@@ -8,12 +8,14 @@
 package settings
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -27,6 +29,8 @@ const (
 	Choice
 	// Range is a number between Min and Max in steps of Step.
 	Range
+	// Text is free text; Lines > 1 makes it a multi-line field.
+	Text
 )
 
 // Option is one value a Choice setting can take.
@@ -44,8 +48,12 @@ type Def struct {
 	Key     string // storage key
 	Section string // dialog tab
 	Label   string
+	// Help is a sentence under the label, for settings whose effect
+	// isn't obvious from the name.
+	Help    string
 	Kind    Kind
 	Default string
+	Lines   int // Text: visible lines
 
 	Options        []Option // Choice
 	Min, Max, Step float64  // Range
@@ -56,6 +64,11 @@ type Def struct {
 	MPV string
 	// MPVFunc maps the value to mpv options when it isn't a 1:1 option.
 	MPVFunc func(value string) []MPVOption
+	// Group joins this setting with others into one mpv option: each
+	// member's GroupFunc returns a fragment (or ""), and the fragments
+	// are joined with commas - the audio filter chain, say.
+	Group     string
+	GroupFunc func(value string) string
 	// Restart marks a setting that only takes effect when goplay
 	// starts (an option mpv reads once, at initialization).
 	Restart bool
@@ -124,6 +137,8 @@ func Load(path string) (*Store, error) {
 	if err != nil {
 		return s, err
 	}
+	// Editors such as Windows Notepad may save with a byte-order mark.
+	data = bytes.TrimPrefix(data, utf8BOM)
 	if err := json.Unmarshal(data, &s.values); err != nil {
 		return s, err
 	}
@@ -174,10 +189,13 @@ func (s *Store) Set(key, value string) {
 	}
 }
 
-// Reset restores every setting to its default; Flush saves it.
+// Reset restores every setting in the dialog to its default; Flush
+// saves it. Key bindings and remembered values (the volume) stay.
 func (s *Store) Reset() {
 	s.mu.Lock()
-	s.values = map[string]string{}
+	for i := range Defs {
+		delete(s.values, Defs[i].Key)
+	}
 	s.dirty = true
 	s.mu.Unlock()
 }
@@ -206,12 +224,89 @@ func (s *Store) Flush() error {
 	return os.Rename(tmp, s.path)
 }
 
-// MPVOptions is every mpv option the current values set, in Defs order:
-// what to apply when mpv starts.
+// MPVOptions is every mpv option the current values set, in Defs order,
+// then the grouped options: what to apply when mpv starts.
 func (s *Store) MPVOptions() []MPVOption {
 	var opts []MPVOption
+	groups := map[string]bool{}
 	for i := range Defs {
+		if g := Defs[i].Group; g != "" {
+			groups[g] = true
+			continue
+		}
 		opts = append(opts, Defs[i].MPVOptions(s.Get(Defs[i].Key))...)
+	}
+	for g := range groups {
+		opts = append(opts, s.GroupOption(g))
 	}
 	return opts
 }
+
+// GroupOption is the value of a grouped mpv option, built from every
+// setting in the group.
+func (s *Store) GroupOption(group string) MPVOption {
+	var parts []string
+	for i := range Defs {
+		d := &Defs[i]
+		if d.Group == group && d.GroupFunc != nil {
+			if f := d.GroupFunc(s.Get(d.Key)); f != "" {
+				parts = append(parts, f)
+			}
+		}
+	}
+	return MPVOption{group, strings.Join(parts, ",")}
+}
+
+// Keys returns the user's key bindings for an action, or nil when they
+// haven't changed the defaults. Bindings are stored as "key.<action>",
+// a comma-separated list of shortcuts ("Ctrl+O, F1"); "none" unbinds.
+func (s *Store) Keys(action string) ([]string, bool) {
+	s.mu.Lock()
+	v, ok := s.values["key."+action]
+	s.mu.Unlock()
+	if !ok {
+		return nil, false
+	}
+	if v == "none" {
+		return []string{}, true
+	}
+	var out []string
+	for _, k := range strings.Split(v, ",") {
+		if k = strings.TrimSpace(k); k != "" {
+			out = append(out, k)
+		}
+	}
+	return out, true
+}
+
+// SetKeys stores the bindings for an action; nil restores the default.
+func (s *Store) SetKeys(action string, keys []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := "key." + action
+	switch {
+	case keys == nil:
+		delete(s.values, k)
+	case len(keys) == 0:
+		s.values[k] = "none"
+	default:
+		s.values[k] = strings.Join(keys, ", ")
+	}
+	s.dirty = true
+}
+
+// ResetKeys restores every default key binding.
+func (s *Store) ResetKeys() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k := range s.values {
+		if strings.HasPrefix(k, "key.") {
+			delete(s.values, k)
+			s.dirty = true
+		}
+	}
+}
+
+// utf8BOM is the byte-order mark some editors (Windows Notepad) write
+// at the start of UTF-8 files.
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}

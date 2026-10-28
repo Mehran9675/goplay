@@ -1,8 +1,11 @@
 package settings
 
 import (
+	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -21,6 +24,9 @@ func TestDefs(t *testing.T) {
 		seen[d.Key] = true
 		if !sections[d.Section] {
 			t.Errorf("%s: unknown section %q", d.Key, d.Section)
+		}
+		if d.Group != "" && d.GroupFunc == nil {
+			t.Errorf("%s: group without GroupFunc", d.Key)
 		}
 		switch d.Kind {
 		case Toggle:
@@ -50,7 +56,8 @@ func TestStoreRoundTrip(t *testing.T) {
 		t.Fatalf("default seek step = %q, want 5", got)
 	}
 	s.Set(KeySeekStep, "10")
-	s.Set(KeyVolume, "0.4")
+	s.Set(KeyVolume, "40")
+	s.SetKeys("open", []string{"Ctrl+O", "F2"})
 	if err := s.Flush(); err != nil {
 		t.Fatal(err)
 	}
@@ -62,8 +69,11 @@ func TestStoreRoundTrip(t *testing.T) {
 	if got := s2.Float(KeySeekStep); got != 10 {
 		t.Errorf("reloaded seek step = %v, want 10", got)
 	}
-	if got := s2.Float(KeyVolume); got != 0.4 {
-		t.Errorf("reloaded volume = %v, want 0.4 (keys without a Def must persist)", got)
+	if got := s2.Float(KeyVolume); got != 40 {
+		t.Errorf("reloaded volume = %v, want 40 (keys without a Def must persist)", got)
+	}
+	if keys, ok := s2.Keys("open"); !ok || !reflect.DeepEqual(keys, []string{"Ctrl+O", "F2"}) {
+		t.Errorf("reloaded keys = %v, %v", keys, ok)
 	}
 
 	// Back to the default: dropped from the file.
@@ -72,28 +82,76 @@ func TestStoreRoundTrip(t *testing.T) {
 		t.Error("default value still stored")
 	}
 
+	// Reset clears settings but keeps bindings and remembered values.
+	s2.Set(KeySeekStep, "15")
 	s2.Reset()
-	if got := s2.Get(KeyVolume); got != "" {
-		t.Errorf("after Reset, volume = %q", got)
+	if got := s2.Get(KeySeekStep); got != "5" {
+		t.Errorf("after Reset, seek step = %q", got)
+	}
+	if got := s2.Get(KeyVolume); got != "40" {
+		t.Errorf("after Reset, volume = %q, want kept", got)
+	}
+	if _, ok := s2.Keys("open"); !ok {
+		t.Error("Reset dropped key bindings")
+	}
+	s2.SetKeys("open", []string{})
+	if keys, ok := s2.Keys("open"); !ok || len(keys) != 0 {
+		t.Errorf("unbound action keys = %v, %v", keys, ok)
+	}
+	s2.ResetKeys()
+	if _, ok := s2.Keys("open"); ok {
+		t.Error("ResetKeys kept a binding")
 	}
 }
 
 func TestMPVOptions(t *testing.T) {
 	s, _ := Load("")
 	s.Set("interpolation", "yes")
+	s.Set("normalize", "yes")
+	s.Set("equalizer", "bass")
 	got := map[string]string{}
 	for _, o := range s.MPVOptions() {
 		got[o.Name] = o.Value
 	}
 	for name, want := range map[string]string{
 		"interpolation": "yes", "video-sync": "display-resample",
-		"hwdec": "auto-safe", "save-position-on-quit": "yes", "config": "yes",
+		"hwdec": "auto-safe", "save-position-on-quit": "yes", "keep-open": "yes",
 	} {
 		if got[name] != want {
 			t.Errorf("%s = %q, want %q", name, got[name], want)
 		}
 	}
+	if af := got["af"]; !strings.Contains(af, "@goplay-norm:") || !strings.Contains(af, "@goplay-eq:") || strings.Contains(af, "night") {
+		t.Errorf("af = %q", af)
+	}
 	if _, ok := got[KeySeekStep]; ok {
 		t.Error("app-only setting passed to mpv")
+	}
+	if _, ok := got["sub-font"]; ok {
+		t.Error("empty font passed to mpv")
+	}
+}
+
+func TestParseOptions(t *testing.T) {
+	got := ParseOptions("# comment\n--deband-iterations=2\n\n  sub-scale = 1.2 \nfullscreen\n")
+	want := []MPVOption{{"deband-iterations", "2"}, {"sub-scale", "1.2"}, {"fullscreen", "yes"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// TestLoadBOM reads a file saved with a UTF-8 byte-order mark, as
+// Windows Notepad writes them.
+func TestLoadBOM(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, append([]byte{0xEF, 0xBB, 0xBF}, "{\"seek_step\": \"10\"}"...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Get(KeySeekStep); got != "10" {
+		t.Errorf("seek step = %q, want 10", got)
 	}
 }

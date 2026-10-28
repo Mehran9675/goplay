@@ -249,7 +249,8 @@ esac
 
 step "Building goplay"
 cd "$root" || exit 1
-if ! go build -o goplay .; then
+version="$(git -C "$root" describe --tags --always --dirty 2>/dev/null || echo dev)"
+if ! go build -ldflags "-X github.com/mehran9675/goplay/internal/app.Version=$version" -o goplay .; then
 	printf '%sERROR: go build failed.%s\n' "$c_err" "$c_off" >&2
 	exit 1
 fi
