@@ -292,6 +292,24 @@ func startDetached(cmd *exec.Cmd) {
 	}
 }
 
+// finished reports whether everything opened has played: the last file
+// ended and nothing loops.
+func (a *App) finished() bool {
+	st := &a.player.State
+	return !st.Idle && !st.Loading && st.EOF && st.Paused && !a.casting() &&
+		!st.LoopFile && !st.LoopPlaylist && st.PlaylistPos == len(st.Playlist)-1
+}
+
+// playAgain plays everything opened from the start.
+func (a *App) playAgain() {
+	if len(a.player.State.Playlist) > 1 {
+		a.player.PlaylistPlay(0)
+		a.player.SetPause(false)
+		return
+	}
+	a.player.TogglePause()
+}
+
 // setSetting stores a setting and puts it into effect.
 func (a *App) setSetting(key, value string) {
 	if a.settings.Get(key) == value {

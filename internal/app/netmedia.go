@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"strconv"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -34,7 +35,9 @@ type netMedia struct {
 	scanMu     sync.Mutex
 	scanCancel context.CancelFunc
 	scanning   bool
-	servers    []*cast.MediaServer
+	// scanGen tells a scan's results from those of one stopped before.
+	scanGen int
+	servers []*cast.MediaServer
 	// silent are the saved addresses where no server answered.
 	silent []string
 
@@ -97,17 +100,25 @@ func (n *netMedia) scan() {
 	n.scanCancel = cancel
 	n.scanMu.Unlock()
 	n.scanning = true
+	n.scanGen++
+	gen := n.scanGen
 	n.servers, n.silent = nil, nil
 	n.server, n.path, n.entries, n.err = nil, nil, nil, ""
 	addrs := n.addresses()
 	go func() {
 		silent := cast.DiscoverMediaServers(ctx, addrs, func(s *cast.MediaServer) {
 			a.Post(func() {
+				if gen != n.scanGen || slices.ContainsFunc(n.servers, s.Same) {
+					return
+				}
 				n.servers = append(n.servers, s)
 				sortServers(n.servers)
 			})
 		})
 		a.Post(func() {
+			if gen != n.scanGen {
+				return
+			}
 			// A scan stopped early didn't give the addresses their time.
 			if ctx.Err() == context.DeadlineExceeded {
 				n.silent = silent
@@ -233,6 +244,7 @@ func (n *netMedia) play(from int) {
 	for _, e := range n.entries[from:] {
 		if !e.Folder {
 			urls = append(urls, e.URL)
+			n.u.a.player.Name(e.URL, e.Title)
 		}
 	}
 	if len(urls) == 0 {

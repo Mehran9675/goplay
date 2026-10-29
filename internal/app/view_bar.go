@@ -25,6 +25,7 @@ type controlBar struct {
 	vol  *slider.Slider
 
 	prev, play, next, mute              *iconbutton.Button
+	normalize, night                    *iconbutton.Button
 	subs, audio, cast, list, more, full *iconbutton.Button
 	speed                               *button.Button
 	timeToggle                          *elements.Pressable
@@ -79,6 +80,9 @@ func newControlBar(u *ui) *controlBar {
 			}
 			a.setVolume(float64(v) * max)
 		})
+
+	b.normalize = ghostButton("normalize", iconSize, "Even out loudness", func() { a.toggleSetting("normalize", "Even out loudness") })
+	b.night = ghostButton("night", iconSize, "Night mode", func() { a.toggleSetting("night_mode", "Night mode") })
 
 	b.subs = ghostButton("subtitles", iconSize, "Subtitles", nil)
 	b.subsA = &anchor{el: b.subs}
@@ -140,6 +144,8 @@ func newControlBar(u *ui) *controlBar {
 		return key("Play / Pause", "play_pause")()
 	})
 	tip(b.mute, key("Mute", "mute"))
+	tip(b.normalize, func() string { return onOff("Even out loudness", a.settings.Bool("normalize")) })
+	tip(b.night, func() string { return onOff("Night mode", a.settings.Bool("night_mode")) })
 	tip(b.subs, key("Subtitles", "subs_toggle"))
 	tip(b.audio, func() string { return "Audio" })
 	tip(b.cast, key("Cast", "cast"))
@@ -188,6 +194,16 @@ func (b *controlBar) refresh() {
 		mic = "volume-low"
 	}
 	b.mute.Icon(ic(mic, iconSize, colText))
+	// The audio effects light up while on.
+	effect := func(btn *iconbutton.Button, icon, setting string) {
+		c := colMuted
+		if a.settings.Bool(setting) {
+			c = colAccent
+		}
+		btn.Icon(ic(icon, iconSize, c))
+	}
+	effect(b.normalize, "normalize", "normalize")
+	effect(b.night, "night", "night_mode")
 	if !b.vol.Dragging() {
 		b.vol.SetValue(float32(level))
 	}
@@ -208,9 +224,14 @@ func (b *controlBar) refresh() {
 	}
 }
 
-// element builds the bar for this frame: solid beside the video, a fade
-// over it.
-func (b *controlBar) element(overlay bool) elements.Element {
+// effectsMinWidth is how wide in dp the bar must be to show the audio
+// effect buttons as well; narrower, they'd push the bar's last buttons
+// off its edge (the audio menu still has them).
+const effectsMinWidth = 760
+
+// element builds the bar for this frame, width px wide: solid beside
+// the video, a fade over it.
+func (b *controlBar) element(overlay bool, width int) elements.Element {
 	b.refresh()
 	a := b.u.a
 	st := &a.player.State
@@ -242,6 +263,9 @@ func (b *controlBar) element(overlay bool) elements.Element {
 
 	left := []elements.Element{b.tips[b.prev], b.tips[b.play], b.tips[b.next], spacer(8), b.tips[b.mute],
 		elements.Box(styles.Styles{Width: 92, Height: 24, Align: properties.AlignCenter}, b.vol)}
+	if width >= b.u.dp(effectsMinWidth) {
+		left = append(left, spacer(6), b.tips[b.normalize], b.tips[b.night])
+	}
 	right := []elements.Element{b.speedA}
 	if len(st.TracksOf(player.Subtitle)) > 0 || !st.Idle {
 		right = append(right, &anchor{el: b.tips[b.subs]})

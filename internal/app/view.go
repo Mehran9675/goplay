@@ -237,7 +237,7 @@ func (u *ui) layout(gtx layout.Context) {
 		place(gtx, image.Rect(0, 0, fb.X, titleH), u.titleBar(overlay))
 	}
 	if u.bottomShown {
-		place(gtx, image.Rect(0, fb.Y-barH, fb.X, fb.Y), u.bar.element(overlay))
+		place(gtx, image.Rect(0, fb.Y-barH, fb.X, fb.Y), u.bar.element(overlay, fb.X))
 	}
 	if overlay {
 		// Hover zones go on top and pass events through, so moving onto

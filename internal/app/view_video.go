@@ -38,6 +38,9 @@ type videoArea struct {
 	vrLast   f32.Point
 
 	openBtn, urlBtn, folderBtn, netBtn *button.Button
+	// againBtn and openNextBtn are the finished screen's: there the
+	// replay is the main action and opening another file comes second.
+	againBtn, openNextBtn *button.Button
 }
 
 func newVideoArea(u *ui) *videoArea {
@@ -81,6 +84,8 @@ func newVideoArea(u *ui) *videoArea {
 	v.urlBtn = button.New("Open URL", secondary).Icon(ic("link", 18, colText)).OnClick(u.showOpenURL)
 	v.folderBtn = button.New("Open Folder", secondary).Icon(ic("folder", 18, colText)).OnClick(a.openFolderDialog)
 	v.netBtn = button.New("Network", secondary).Icon(ic("tv", 18, colText)).OnClick(func() { u.dialogs.net.show() })
+	v.againBtn = button.New("Play Again", primary).Icon(ic("replay", 18, colOnLight)).OnClick(a.playAgain)
+	v.openNextBtn = button.New("Open File", secondary).Icon(ic("file", 18, colText)).OnClick(a.openFileDialog)
 	return v
 }
 
@@ -157,7 +162,9 @@ func (v *videoArea) content(elements.PressState) elements.Element {
 	case a.casting():
 		layers = append(layers, v.castScreen())
 	case st.Idle:
-		layers = append(layers, v.welcome())
+		layers = append(layers, v.welcome(false))
+	case a.finished():
+		layers = append(layers, v.welcome(true))
 	case !st.HasVideo() && !st.Loading:
 		layers = append(layers, v.audioOnly())
 	}
@@ -259,17 +266,39 @@ func (v *videoArea) info() elements.Element {
 }
 
 // welcome is the empty state: what to open, and what was played lately.
-func (v *videoArea) welcome() elements.Element {
+// finished shows it over the last frame once everything has played,
+// saying so and offering to play it again.
+func (v *videoArea) welcome(finished bool) elements.Element {
 	a := v.u.a
 	head := elements.Box(styles.Styles{FlexDirection: properties.FlexDirectionColumn, Align: properties.AlignCenter, Gap: 10},
 		ic("logo", 56, colHighlight),
 		elements.Text("Drop a video here, or", styles.Styles{Color: colMuted, FontSize: 15}),
 		elements.Row(styles.Styles{Gap: 10, Wrap: properties.WrapNoWrap, Margin: properties.Inset{Top: 6}}, v.openBtn, v.urlBtn, v.folderBtn, v.netBtn),
 	)
+	if finished {
+		st := &a.player.State
+		note := displayTitle(st)
+		if n := len(st.Playlist); n > 1 {
+			note = "All " + plural(n, "file", "files") + " in the playlist have played."
+		}
+		head = elements.Box(styles.Styles{FlexDirection: properties.FlexDirectionColumn, Align: properties.AlignCenter, Gap: 10},
+			elements.Text("Finished playing", styles.Styles{Color: colText, FontSize: 20, FontWeight: properties.FontWeightSemiBold}),
+			elements.Box(styles.Styles{MaxWidth: 520},
+				elements.Text(note, styles.Styles{Color: colMuted, FontSize: 14, MaxLines: 2, TextAlign: properties.TextAlignCenter})),
+			elements.Box(styles.Styles{Margin: properties.Inset{Top: 6, Bottom: 10}}, v.againBtn),
+			elements.Text("Or open something else", styles.Styles{Color: colMuted, FontSize: 13}),
+			elements.Row(styles.Styles{Gap: 10, Wrap: properties.WrapNoWrap}, v.openNextBtn, v.urlBtn, v.folderBtn, v.netBtn),
+		)
+	}
 	col := []elements.Element{head}
 	if recent := a.history.Items(); len(recent) > 0 {
-		if len(recent) > 6 {
-			recent = recent[:6]
+		// The finished screen's heading is taller; it lists fewer.
+		limit := 6
+		if finished {
+			limit = 3
+		}
+		if len(recent) > limit {
+			recent = recent[:limit]
 		}
 		rows := []elements.Element{elements.Row(styles.Styles{Width: -1, Align: properties.AlignCenter, Wrap: properties.WrapNoWrap},
 			elements.Box(styles.Styles{FlexGrow: 1, Width: -1}, elements.Text("Recent", styles.Styles{Color: colMuted, FontSize: 12, FontWeight: properties.FontWeightSemiBold})),
@@ -280,7 +309,14 @@ func (v *videoArea) welcome() elements.Element {
 		}
 		col = append(col, elements.Box(styles.Styles{Width: 460, FlexDirection: properties.FlexDirectionColumn, Gap: 2, Margin: properties.Inset{Top: 28}}, rows...))
 	}
-	return centered(elements.Box(styles.Styles{FlexDirection: properties.FlexDirectionColumn, Align: properties.AlignCenter}, col...))
+	screen := centered(elements.Box(styles.Styles{FlexDirection: properties.FlexDirectionColumn, Align: properties.AlignCenter}, col...))
+	if finished {
+		// The last frame stays behind, dimmed.
+		return elements.Stack(styles.Styles{Width: -1, Height: -1},
+			elements.Box(styles.Styles{Width: -1, Height: -1, Background: "#000000d9"}),
+			screen)
+	}
+	return screen
 }
 
 func (v *videoArea) clearRecent() elements.Element {

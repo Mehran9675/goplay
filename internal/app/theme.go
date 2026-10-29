@@ -30,6 +30,9 @@ const (
 	colScrim      = "#000000"
 	colTrack      = "#ffffff33"
 	colSwitchOn   = "#30d158"
+	// colAccent marks what's played on the timeline and the audio
+	// effects that are on.
+	colAccent = "#4c9dff"
 )
 
 // Sizes in dp.

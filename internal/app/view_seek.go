@@ -127,7 +127,7 @@ func (s *seekBar) Layout(gtx layout.Context) layout.Dimensions {
 		paint.FillShape(gtx.Ops, c, clip.UniformRRect(rect, r).Op(gtx.Ops))
 	}
 
-	bar(pad, pad+span, rgba(0xffffff, 0x38))
+	bar(pad, pad+span, rgba(0xffffff, 0x24))
 	st := &a.player.State
 	if !a.casting() {
 		for _, r := range st.CacheRanges {
@@ -145,7 +145,9 @@ func (s *seekBar) Layout(gtx layout.Context) layout.Dimensions {
 	if s.dragging {
 		shown = s.dragFrac * dur
 	}
-	bar(pad, x(shown), rgba(0xffffff, 0xff))
+	// The played part is in the accent color: white over the white
+	// buffered part was hard to tell apart.
+	bar(pad, x(shown), properties.CalcColor(colAccent))
 	// Chapter marks: small gaps in the track.
 	if !a.casting() && dur > 0 {
 		gap := float32(gtx.Dp(2))

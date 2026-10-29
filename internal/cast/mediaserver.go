@@ -38,6 +38,11 @@ type MediaServer struct {
 	browseType      string
 }
 
+// Same reports whether s and o are the same server.
+func (s *MediaServer) Same(o *MediaServer) bool {
+	return s.ID == o.ID || s.browseURL == o.browseURL
+}
+
 // MediaEntry is a folder or a playable file on a media server.
 type MediaEntry struct {
 	ID, Title string
@@ -70,9 +75,11 @@ func DiscoverMediaServers(ctx context.Context, addrs []string, found func(*Media
 		if err != nil {
 			return false
 		}
+		// A server answering on several interfaces, or both to the
+		// search and at a saved address, is listed once.
 		mu.Lock()
-		dup := seen[s.ID]
-		seen[s.ID] = true
+		dup := seen[s.ID] || seen[s.browseURL]
+		seen[s.ID], seen[s.browseURL] = true, true
 		mu.Unlock()
 		if !dup {
 			found(s)

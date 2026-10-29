@@ -208,8 +208,13 @@ var observed = []struct {
 	format mpv.Format
 	apply  func(p *Player, ev *mpv.Event)
 }{
-	{"path", mpv.FormatString, func(p *Player, ev *mpv.Event) { p.State.Path = ev.String }},
-	{"media-title", mpv.FormatString, func(p *Player, ev *mpv.Event) { p.State.Title = ev.String }},
+	{"path", mpv.FormatString, func(p *Player, ev *mpv.Event) {
+		p.State.Path = ev.String
+		if t := p.titles[ev.String]; t != "" {
+			p.State.Title = t
+		}
+	}},
+	{"media-title", mpv.FormatString, func(p *Player, ev *mpv.Event) { p.State.Title = p.titleOf(p.State.Path, ev.String) }},
 	{"idle-active", mpv.FormatFlag, func(p *Player, ev *mpv.Event) {
 		p.State.Idle = ev.Flag
 		if ev.Flag {
@@ -242,6 +247,11 @@ var observed = []struct {
 	{"playlist", mpv.FormatNone, func(p *Player, ev *mpv.Event) {
 		p.State.Playlist = nil
 		p.h.JSON("playlist", &p.State.Playlist)
+		for i, e := range p.State.Playlist {
+			if e.Title == "" {
+				p.State.Playlist[i].Title = p.titles[e.Filename]
+			}
+		}
 	}},
 	{"playlist-pos", mpv.FormatInt64, func(p *Player, ev *mpv.Event) { p.State.PlaylistPos = intOr(ev, -1) }},
 	{"dwidth", mpv.FormatInt64, func(p *Player, ev *mpv.Event) { p.State.VideoW = intOr(ev, 0) }},

@@ -91,6 +91,9 @@ type Player struct {
 	audioDevice string
 	devicesSeen bool
 	audioTrack  int
+	// titles names items opened by address, which mpv would show as
+	// the address (see Name).
+	titles map[string]string
 
 	wake chan struct{} // tests only: woken with the core
 }
@@ -101,7 +104,7 @@ func New(cfg Config) (*Player, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &Player{h: h, filters: map[string]string{}}
+	p := &Player{h: h, filters: map[string]string{}, titles: map[string]string{}}
 	p.State.ABLoopA, p.State.ABLoopB = math.NaN(), math.NaN()
 	p.State.Idle = true
 	p.State.Speed = 1
@@ -194,7 +197,8 @@ func (p *Player) Process() bool {
 			// The property updates for the new file can still be queued
 			// behind this event: read what the callback needs now.
 			p.State.Path, _ = p.h.String("path")
-			p.State.Title, _ = p.h.String("media-title")
+			mt, _ := p.h.String("media-title")
+			p.State.Title = p.titleOf(p.State.Path, mt)
 			p.State.Duration, _ = p.h.Double("duration")
 			p.State.Tracks = nil
 			p.h.JSON("track-list", &p.State.Tracks)
@@ -246,6 +250,24 @@ func (p *Player) Open(items []string, appendToPlaylist bool) error {
 		}
 	}
 	return nil
+}
+
+// Name gives the item at url a title, shown for it instead of the
+// address mpv would show: a media server's files are addresses with an
+// ID in them, and the server lists their names.
+func (p *Player) Name(url, title string) {
+	if title != "" {
+		p.titles[url] = title
+	}
+}
+
+// titleOf is the title to show for path: the name given with Name, or
+// mpv's media-title.
+func (p *Player) titleOf(path, mediaTitle string) string {
+	if t := p.titles[path]; t != "" {
+		return t
+	}
+	return mediaTitle
 }
 
 // Stop ends playback and clears the playlist.
