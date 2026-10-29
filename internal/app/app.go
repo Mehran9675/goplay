@@ -95,6 +95,9 @@ type App struct {
 	// recent list when it ends.
 	lastPath  string
 	lastTitle string
+	// resumeSaved is set once Quit has saved where playback was, so
+	// shutdown doesn't save it again, paused.
+	resumeSaved bool
 
 	// startupCommands run once the first file has loaded (--run).
 	startupCommands []string
@@ -562,7 +565,9 @@ func (a *App) shutdown() {
 	}
 	a.settings.Flush()
 	a.stopCasting()
-	a.player.SaveResumePosition()
+	if !a.resumeSaved {
+		a.player.SaveResumePosition()
+	}
 }
 
 // runCommands runs commands by ID (from --run).
@@ -577,8 +582,14 @@ func (a *App) runCommands(ids []string) {
 	a.dirty = true
 }
 
-// Quit closes the window, which ends the app.
-func (a *App) Quit() { a.g.Close() }
+// Quit closes the window, which ends the app. Playback stops first, so
+// nothing is heard while the window and the player shut down.
+func (a *App) Quit() {
+	a.player.SaveResumePosition()
+	a.resumeSaved = true
+	a.player.SetPause(true)
+	a.g.Close()
+}
 
 // windowCtl lets the title bar drive the window.
 type windowCtl struct{ a *App }
