@@ -19,8 +19,9 @@ Made for macOS first, and built for Windows and Linux too.
 - Recent files on the start screen, with how far you got.
 - Drag and drop files, folders and subtitles, or paste a link or path.
 - Media on your network: browse the videos and music shared by DLNA/UPnP
-  media servers (a NAS, Plex, Jellyfin, Windows media sharing) and play a
-  file or a whole folder.
+  media servers (a NAS, Plex, Emby, Jellyfin, Windows media sharing) and play
+  a file or a whole folder. A server that isn't found by itself can be added
+  by its address.
 
 **Controls**
 - In a window, the title bar and the controls sit above and below the

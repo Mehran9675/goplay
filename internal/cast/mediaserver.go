@@ -2,9 +2,14 @@ package cast
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"html"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,17 +54,21 @@ type MediaEntry struct {
 	Artist, Album string
 }
 
-// DiscoverMediaServers searches the network for media servers until ctx
-// ends, calling found from its own goroutines with each one, once.
-func DiscoverMediaServers(ctx context.Context, found func(*MediaServer)) {
+// DiscoverMediaServers looks for media servers until ctx ends, on the
+// whole network and at each of addrs (see askAddress), calling found
+// from its own goroutines with each one, once. It returns the addresses
+// where none answered.
+func DiscoverMediaServers(ctx context.Context, addrs []string, found func(*MediaServer)) (silent []string) {
 	var (
-		mu   sync.Mutex
-		seen = map[string]bool{}
+		mu       sync.Mutex
+		seen     = map[string]bool{}
+		answered = make([]bool, len(addrs))
+		wg       sync.WaitGroup
 	)
-	ssdpSearch(ctx, serverType, func(loc string) {
+	add := func(loc string) bool {
 		s, err := describeServer(ctx, loc)
 		if err != nil {
-			return
+			return false
 		}
 		mu.Lock()
 		dup := seen[s.ID]
@@ -68,7 +77,101 @@ func DiscoverMediaServers(ctx context.Context, found func(*MediaServer)) {
 		if !dup {
 			found(s)
 		}
-	})
+		return true
+	}
+	for i, addr := range addrs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			askAddress(ctx, addr, func(loc string) {
+				if add(loc) {
+					mu.Lock()
+					answered[i] = true
+					mu.Unlock()
+				}
+			})
+		}()
+	}
+	ssdpSearch(ctx, ssdpAddr, serverType, func(loc string) { add(loc) })
+	wg.Wait()
+	mu.Lock()
+	defer mu.Unlock()
+	for i, addr := range addrs {
+		if !answered[i] {
+			silent = append(silent, addr)
+		}
+	}
+	return silent
+}
+
+// embyPort is where Emby and Jellyfin serve their web pages and API by
+// default.
+const embyPort = "8096"
+
+// askAddress asks one device for its media servers until ctx ends,
+// calling found with each one's description URL. addr is a host name or
+// IP address, with or without the port of its web page, or the URL of a
+// server's UPnP description. The device is asked by SSDP directly, which
+// reaches servers a multicast search doesn't (a firewall or router that
+// drops multicast, another subnet); Emby and Jellyfin, whose description
+// is at a URL with their server ID in it, are also asked through their
+// web API.
+func askAddress(ctx context.Context, addr string, found func(location string)) {
+	addr = strings.TrimSpace(addr)
+	if !strings.Contains(addr, "://") {
+		addr = "http://" + addr
+	}
+	u, err := url.Parse(addr)
+	if err != nil || u.Hostname() == "" {
+		return
+	}
+	if u.Path != "" && u.Path != "/" {
+		found(u.String())
+		return
+	}
+	go func() {
+		if loc := embyDescription(ctx, u); loc != "" {
+			found(loc)
+		}
+	}()
+	ssdpSearch(ctx, net.JoinHostPort(u.Hostname(), "1900"), serverType, found)
+}
+
+// embyDescription returns the UPnP description URL of the Emby or
+// Jellyfin server at u (embyPort when u has no port), or "" when there's
+// none: their public system information gives the server's ID.
+func embyDescription(ctx context.Context, u *url.URL) string {
+	host := u.Host
+	if u.Port() == "" {
+		host = net.JoinHostPort(u.Hostname(), embyPort)
+	}
+	base := u.Scheme + "://" + host
+	// Emby answers under /emby too; Jellyfin only at the top.
+	for _, path := range []string{"/System/Info/Public", "/emby/System/Info/Public"} {
+		var info struct{ Id string }
+		if getJSON(ctx, base+path, &info) == nil && info.Id != "" {
+			return base + "/dlna/" + url.PathEscape(info.Id) + "/description.xml"
+		}
+	}
+	return ""
+}
+
+func getJSON(ctx context.Context, link string, v any) error {
+	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("cast: %s: %s", link, resp.Status)
+	}
+	return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(v)
 }
 
 func describeServer(ctx context.Context, location string) (*MediaServer, error) {

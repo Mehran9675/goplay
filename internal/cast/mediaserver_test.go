@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 const testDIDL = `<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
@@ -82,5 +84,54 @@ func TestBrowse(t *testing.T) {
 	}
 	if got := strings.Join(titles, ", "); got != "Movies, Holiday & Beach, Song" {
 		t.Errorf("entries = %s", got)
+	}
+}
+
+// TestAskAddressEmby finds a server from its address alone, through
+// the web API Emby and Jellyfin answer, and reports an address where
+// nothing answers.
+func TestAskAddressEmby(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/emby/System/Info/Public":
+			fmt.Fprint(w, `{"ServerName":"Living Room","Id":"a1b2c3"}`)
+		case "/dlna/a1b2c3/description.xml":
+			fmt.Fprint(w, `<?xml version="1.0"?><root xmlns="urn:schemas-upnp-org:device-1-0"><device>`+
+				`<friendlyName>Living Room</friendlyName><manufacturer>Emby</manufacturer><UDN>uuid:a1b2c3</UDN>`+
+				`<serviceList><service><serviceType>urn:schemas-upnp-org:service:ContentDirectory:1</serviceType>`+
+				`<controlURL>/dlna/a1b2c3/contentdirectory/control</controlURL></service></serviceList></device></root>`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	addr := strings.TrimPrefix(srv.URL, "http://")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var (
+		mu    sync.Mutex
+		found []*MediaServer
+	)
+	silent := DiscoverMediaServers(ctx, []string{addr, "127.0.0.1:1"}, func(s *MediaServer) {
+		mu.Lock()
+		found = append(found, s)
+		mu.Unlock()
+	})
+	mu.Lock()
+	defer mu.Unlock()
+	var got *MediaServer
+	for _, s := range found {
+		if s.ID == "upnp:uuid:a1b2c3" {
+			got = s
+		}
+	}
+	if got == nil {
+		t.Fatalf("the server at %s wasn't found (found %d others)", addr, len(found))
+	}
+	if got.Name != "Living Room" || got.browseURL != srv.URL+"/dlna/a1b2c3/contentdirectory/control" {
+		t.Errorf("server = %+v", got)
+	}
+	if len(silent) != 1 || silent[0] != "127.0.0.1:1" {
+		t.Errorf("silent = %v, want [127.0.0.1:1]", silent)
 	}
 }
