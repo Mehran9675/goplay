@@ -84,6 +84,13 @@ type Player struct {
 	// filters need decoded frames in system memory ("" when not
 	// switched).
 	hwdecSaved string
+	// audioDevice is the output device the user chose ("auto" for the
+	// default); devicesSeen is set once mpv has sent its device list.
+	// audioTrack is the audio track playing, or last playing before mpv
+	// gave up on its output; 0 when the user turned audio off.
+	audioDevice string
+	devicesSeen bool
+	audioTrack  int
 
 	wake chan struct{} // tests only: woken with the core
 }
@@ -118,8 +125,12 @@ func New(cfg Config) (*Player, error) {
 			return nil, fmt.Errorf("mpv: %s=%s: %w", o.Name, o.Value, err)
 		}
 	}
+	p.audioDevice = "auto"
 	var bad []string
 	for _, o := range cfg.Options {
+		if o.Name == "audio-device" {
+			p.audioDevice = o.Value
+		}
 		if err := h.SetOption(o.Name, o.Value); err != nil {
 			// A bad saved value must not stop the player from starting:
 			// mpv keeps its default and the caller is told.
@@ -175,6 +186,7 @@ func (p *Player) Process() bool {
 			}
 		case mpv.EventStartFile:
 			p.State.Loading = true
+			p.audioTrack = 0
 			changed = true
 		case mpv.EventFileLoaded:
 			p.State.Loading = false
@@ -186,6 +198,7 @@ func (p *Player) Process() bool {
 			p.State.Duration, _ = p.h.Double("duration")
 			p.State.Tracks = nil
 			p.h.JSON("track-list", &p.State.Tracks)
+			p.noteAudioTrack()
 			if p.OnFileLoaded != nil {
 				p.OnFileLoaded()
 			}
@@ -330,6 +343,9 @@ func (p *Player) SetAudioDelay(d float64) { p.h.SetDouble("audio-delay", d) }
 
 // SelectTrack plays track id of kind; 0 turns the kind off.
 func (p *Player) SelectTrack(k TrackKind, id int) {
+	if k == Audio {
+		p.audioTrack = id
+	}
 	p.h.SetString(trackProperty(k), idOrNo(id))
 }
 

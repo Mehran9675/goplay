@@ -231,7 +231,9 @@ var observed = []struct {
 	{"track-list", mpv.FormatNone, func(p *Player, ev *mpv.Event) {
 		p.State.Tracks = nil
 		p.h.JSON("track-list", &p.State.Tracks)
+		p.noteAudioTrack()
 	}},
+	{"audio-device-list", mpv.FormatNone, func(p *Player, ev *mpv.Event) { p.audioDevicesChanged() }},
 	{"chapter-list", mpv.FormatNone, func(p *Player, ev *mpv.Event) {
 		p.State.Chapters = nil
 		p.h.JSON("chapter-list", &p.State.Chapters)

@@ -312,6 +312,10 @@ func (a *App) applySetting(key string) {
 	switch key {
 	case settings.KeyAlwaysOnTop:
 		a.setOnTop(v == "yes")
+	case settings.KeyAudioDevice:
+		// The player follows the device as it comes and goes.
+		a.player.SetAudioDevice(v)
+		return
 	case settings.KeyStereoView:
 		if a.stereo.layout != player.Layout2D {
 			a.stereo.view = player.StereoView(v)
