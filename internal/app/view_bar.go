@@ -196,9 +196,9 @@ func (b *controlBar) refresh() {
 	b.mute.Icon(ic(mic, iconSize, colText))
 	// The audio effects light up while on.
 	effect := func(btn *iconbutton.Button, icon, setting string) {
-		c := colMuted
+		c := colFaint
 		if a.settings.Bool(setting) {
-			c = colAccent
+			c = colHighlight
 		}
 		btn.Icon(ic(icon, iconSize, c))
 	}

@@ -127,11 +127,13 @@ func (s *seekBar) Layout(gtx layout.Context) layout.Dimensions {
 		paint.FillShape(gtx.Ops, c, clip.UniformRRect(rect, r).Op(gtx.Ops))
 	}
 
-	bar(pad, pad+span, rgba(0xffffff, 0x24))
+	// What's left is dark and see-through, what's buffered a faint
+	// white over it, and what's played white, so the three stand apart.
+	bar(pad, pad+span, rgba(0x34343a, 0xcc))
 	st := &a.player.State
 	if !a.casting() {
 		for _, r := range st.CacheRanges {
-			bar(x(r[0]), x(r[1]), rgba(0xffffff, 0x5c))
+			bar(x(r[0]), x(r[1]), rgba(0xffffff, 0x2a))
 		}
 		if !math.IsNaN(st.ABLoopA) {
 			end := dur
@@ -145,9 +147,7 @@ func (s *seekBar) Layout(gtx layout.Context) layout.Dimensions {
 	if s.dragging {
 		shown = s.dragFrac * dur
 	}
-	// The played part is in the accent color: white over the white
-	// buffered part was hard to tell apart.
-	bar(pad, x(shown), properties.CalcColor(colAccent))
+	bar(pad, x(shown), rgba(0xffffff, 0xff))
 	// Chapter marks: small gaps in the track.
 	if !a.casting() && dur > 0 {
 		gap := float32(gtx.Dp(2))
