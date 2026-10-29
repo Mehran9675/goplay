@@ -353,8 +353,11 @@ func (a *App) frame(gtx layout.Context) layout.Dimensions {
 	a.updateVideoMargins(fb)
 	st := &a.player.State
 	a.showVideo.Store(!st.Idle && !a.casting())
-	a.handleKeys(gtx)
 	a.ui.layout(gtx)
+	// After the UI, so a focused text field gets its keys (Backspace,
+	// the arrows) before the shortcuts do: Gio hands a key event to the
+	// first matching gtx.Event call in the frame.
+	a.handleKeys(gtx)
 
 	if a.dirty {
 		a.dirty = false
