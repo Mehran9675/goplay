@@ -42,8 +42,9 @@
  "Couldn't load the subtitles: {error}": "Neizdevās ielādēt subtitrus: {error}",
  "There's nothing to play there.": "Tur nav ko atskaņot.",
  "{count} files added to the playlist": {
+  "zero": "Sarakstam pievienoti {count} faili",
   "one": "Sarakstam pievienots {count} fails",
-  "other": "Sarakstam pievienoti faili: {count}"
+  "other": "Sarakstam pievienoti {count} faili"
  },
  "The clipboard is empty": "Starpliktuve ir tukša",
  "The clipboard doesn't hold a link or a file": "Starpliktuvē nav ne saites, ne faila",
@@ -149,8 +150,9 @@
  "This file has no chapters.": "Šim failam nav nodaļu.",
  "Nothing queued. Open a folder, or add files.": "Rindā nekā nav. Atveriet mapi vai pievienojiet failus.",
  "{count} items": {
+  "zero": "{count} vienumi",
   "one": "{count} vienums",
-  "other": "Vienumi: {count}"
+  "other": "{count} vienumi"
  },
  "Remove": "Noņemt",
  "Done": "Gatavs",
@@ -177,8 +179,9 @@
  "Media information": "Multivides informācija",
  "Drop a video here, or": "Ievelciet video šeit vai",
  "All {count} files in the playlist have played.": {
-  "one": "Saraksta fails ir atskaņots.",
-  "other": "Visi saraksta faili ir atskaņoti ({count})."
+  "zero": "Atskaņoti visi {count} saraksta faili.",
+  "one": "Atskaņots {count} saraksta fails.",
+  "other": "Atskaņoti visi {count} saraksta faili."
  },
  "Finished playing": "Atskaņošana pabeigta",
  "Or open something else": "Vai atveriet ko citu",

@@ -43,7 +43,9 @@
  "There's nothing to play there.": "Tam ni ničesar za predvajanje.",
  "{count} files added to the playlist": {
   "one": "Na seznam dodana {count} datoteka",
-  "other": "Datoteke, dodane na seznam: {count}"
+  "two": "Na seznam dodani {count} datoteki",
+  "few": "Na seznam dodane {count} datoteke",
+  "other": "Na seznam dodanih {count} datotek"
  },
  "The clipboard is empty": "Odložišče je prazno",
  "The clipboard doesn't hold a link or a file": "V odložišču ni povezave ali datoteke",
@@ -150,7 +152,9 @@
  "Nothing queued. Open a folder, or add files.": "V čakalni vrsti ni ničesar. Odprite mapo ali dodajte datoteke.",
  "{count} items": {
   "one": "{count} element",
-  "other": "Elementi: {count}"
+  "two": "{count} elementa",
+  "few": "{count} elementi",
+  "other": "{count} elementov"
  },
  "Remove": "Odstrani",
  "Done": "Končano",
@@ -177,8 +181,10 @@
  "Media information": "Podatki o predstavnosti",
  "Drop a video here, or": "Spustite video sem ali",
  "All {count} files in the playlist have played.": {
-  "one": "Datoteka s seznama je bila predvajana.",
-  "other": "Predvajane so vse datoteke s seznama ({count})."
+  "one": "Predvajana je {count} datoteka s seznama.",
+  "two": "Predvajani sta obe datoteki s seznama ({count}).",
+  "few": "Predvajane so vse {count} datoteke s seznama.",
+  "other": "Predvajanih je vseh {count} datotek s seznama."
  },
  "Finished playing": "Predvajanje končano",
  "Or open something else": "Ali odprite kaj drugega",
