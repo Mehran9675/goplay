@@ -110,6 +110,26 @@ func newUI(a *App) *ui {
 	return u
 }
 
+// rebuildUI makes the interface again, as for a new language: its parts
+// are made once with their text. Where the window and picture stand,
+// and what's open, carry over.
+func (a *App) rebuildUI() {
+	old := a.ui
+	u := newUI(a)
+	u.fb, u.scale, u.videoRect = old.fb, old.scale, old.videoRect
+	u.marginTop, u.marginBottom = old.marginTop, old.marginBottom
+	u.lastMove, u.lastPointer = old.lastMove, old.lastPointer
+	u.pip, u.pipRestore, u.pipHadFrame, u.pipWasOnTop = old.pip, old.pipRestore, old.pipHadFrame, old.pipWasOnTop
+	u.panelOpen, u.panelTab = old.panelOpen, old.panelTab
+	u.panel.tabs.SetSelected(old.panelTab)
+	u.infoOpen = old.infoOpen
+	u.flipH, u.flipV = old.flipH, old.flipV
+	if old.dialogs.settingsOpen {
+		u.showSettings(old.dialogs.prefs.page)
+	}
+	a.ui = u
+}
+
 func (u *ui) titleHeightDp() int {
 	if runtime.GOOS == "darwin" {
 		return titleBarMacH
@@ -270,7 +290,7 @@ func (u *ui) windowTitle() string {
 	st := &u.a.player.State
 	switch {
 	case u.a.casting():
-		return st.Title + " — casting to " + u.a.cast.device
+		return tr("{title} — casting to {device}", "title", st.Title, "device", u.a.cast.device)
 	case !st.Idle && st.Title != "":
 		return st.Title
 	}
@@ -279,7 +299,7 @@ func (u *ui) windowTitle() string {
 
 // titleButtons are the title bar's extra controls: the app menu.
 func (u *ui) titleButtons() []elements.Element {
-	more := ghostButton("menu", 18, "Menu", func() { u.openAppMenu() })
+	more := ghostButton("menu", 18, tr("Menu"), func() { u.openAppMenu() })
 	u.appMenuAnchor = &anchor{el: more}
 	return []elements.Element{u.appMenuAnchor}
 }

@@ -7,6 +7,7 @@ var Sections = []string{"General", "Playback", "Video", "Audio", "Subtitles", "3
 
 // Keys of the settings the app (not mpv) acts on.
 const (
+	KeyLanguage        = "language"
 	KeyAlwaysOnTop     = "always_on_top"
 	KeyResizeToVideo   = "resize_to_video"
 	KeyRemainingTime   = "remaining_time"
@@ -66,6 +67,39 @@ var languages = []Option{
 	{"Vietnamese", "vie,vi"},
 }
 
+// uiLanguages are the languages GoPlay's interface is translated into,
+// each named in itself. "" follows the system.
+var uiLanguages = []Option{
+	{"Automatic", ""},
+	{"English", "en"},
+	{"Български", "bg"},
+	{"Català", "ca"},
+	{"Čeština", "cs"},
+	{"Dansk", "da"},
+	{"Deutsch", "de"},
+	{"Eesti", "et"},
+	{"Ελληνικά", "el"},
+	{"Español", "es"},
+	{"Français", "fr"},
+	{"Hrvatski", "hr"},
+	{"Italiano", "it"},
+	{"Latviešu", "lv"},
+	{"Lietuvių", "lt"},
+	{"Magyar", "hu"},
+	{"Nederlands", "nl"},
+	{"Norsk bokmål", "nb"},
+	{"Polski", "pl"},
+	{"Português", "pt"},
+	{"Română", "ro"},
+	{"Русский", "ru"},
+	{"Slovenčina", "sk"},
+	{"Slovenščina", "sl"},
+	{"Српски", "sr"},
+	{"Suomi", "fi"},
+	{"Svenska", "sv"},
+	{"Українська", "uk"},
+}
+
 // StereoViews are the ways to show 3D video, for the default view and
 // the 3D menu. Values are player.StereoView names.
 var StereoViews = []Option{
@@ -85,6 +119,7 @@ var StereoViews = []Option{
 // Defs is every setting, grouped by Section in display order.
 var Defs = []Def{
 	// General
+	{Key: KeyLanguage, Section: "General", Label: "Language", Kind: Choice, Default: "", Options: uiLanguages},
 	{Key: KeyAlwaysOnTop, Section: "General", Label: "Keep the window on top", Kind: Toggle, Default: "no"},
 	{Key: KeyResizeToVideo, Section: "General", Label: "Resize the window to fit each video", Kind: Toggle, Default: "yes"},
 	{Key: KeyClickToPause, Section: "General", Label: "Click the video to pause", Kind: Toggle, Default: "yes",

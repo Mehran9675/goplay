@@ -46,7 +46,7 @@ type videoArea struct {
 func newVideoArea(u *ui) *videoArea {
 	v := &videoArea{u: u}
 	a := u.a
-	v.press = elements.NewPressable(v.content).Label("Video").Focusable(false).
+	v.press = elements.NewPressable(v.content).Label(tr("Video")).Focusable(false).
 		Styles(styles.Styles{Width: -1, Height: -1, Cursor: properties.CursorDefault}).
 		OnClick(func(e elements.ClickEvent) {
 			st := &a.player.State
@@ -80,12 +80,12 @@ func newVideoArea(u *ui) *videoArea {
 		Background: colSurface3, Color: colText, FontSize: 14, FontWeight: properties.FontWeightMedium,
 		Padding: properties.SymmetricInset(18, 11), BorderRadius: 22,
 	}
-	v.openBtn = button.New("Open File", primary).Icon(ic("file", 18, colOnLight)).OnClick(a.openFileDialog)
-	v.urlBtn = button.New("Open URL", secondary).Icon(ic("link", 18, colText)).OnClick(u.showOpenURL)
-	v.folderBtn = button.New("Open Folder", secondary).Icon(ic("folder", 18, colText)).OnClick(a.openFolderDialog)
-	v.netBtn = button.New("Network", secondary).Icon(ic("tv", 18, colText)).OnClick(func() { u.dialogs.net.show() })
-	v.againBtn = button.New("Play Again", primary).Icon(ic("replay", 18, colOnLight)).OnClick(a.playAgain)
-	v.openNextBtn = button.New("Open File", secondary).Icon(ic("file", 18, colText)).OnClick(a.openFileDialog)
+	v.openBtn = button.New(tr("Open File"), primary).Icon(ic("file", 18, colOnLight)).OnClick(a.openFileDialog)
+	v.urlBtn = button.New(tr("Open URL"), secondary).Icon(ic("link", 18, colText)).OnClick(u.showOpenURL)
+	v.folderBtn = button.New(tr("Open Folder"), secondary).Icon(ic("folder", 18, colText)).OnClick(a.openFolderDialog)
+	v.netBtn = button.New(tr("Network"), secondary).Icon(ic("tv", 18, colText)).OnClick(func() { u.dialogs.net.show() })
+	v.againBtn = button.New(tr("Play Again"), primary).Icon(ic("replay", 18, colOnLight)).OnClick(a.playAgain)
+	v.openNextBtn = button.New(tr("Open File"), secondary).Icon(ic("file", 18, colText)).OnClick(a.openFileDialog)
 	return v
 }
 
@@ -209,9 +209,9 @@ func centered(el elements.Element) elements.Element {
 
 // dropTarget shows that files dragged over the window can be dropped.
 func (v *videoArea) dropTarget(playing bool) elements.Element {
-	hint := "Drop to play"
+	hint := tr("Drop to play")
 	if playing {
-		hint = "Drop to play, or to add subtitles"
+		hint = tr("Drop to play, or to add subtitles")
 	}
 	return elements.Box(styles.Styles{Position: properties.PositionAbsolute, Top: 0, Left: 0, Right: 0, Bottom: 0,
 		Padding: properties.UniformInset(12)},
@@ -251,10 +251,10 @@ func (v *videoArea) info() elements.Element {
 	if u.overlay() {
 		top += u.titleHeightDp()
 	}
-	rows := []elements.Element{elements.Text("Media information", styles.Styles{Color: colText, FontSize: 13, FontWeight: properties.FontWeightSemiBold})}
+	rows := []elements.Element{elements.Text(tr("Media information"), styles.Styles{Color: colText, FontSize: 13, FontWeight: properties.FontWeightSemiBold})}
 	for _, r := range u.infoRows {
 		rows = append(rows, elements.Row(styles.Styles{Gap: 12, Wrap: properties.WrapNoWrap},
-			elements.Box(styles.Styles{Width: 120}, elements.Text(r[0], styles.Styles{Color: colMuted, FontSize: 12})),
+			elements.Box(styles.Styles{Width: 120}, elements.Text(tr(r[0]), styles.Styles{Color: colMuted, FontSize: 12})),
 			elements.Box(styles.Styles{MaxWidth: 300}, elements.Text(r[1], styles.Styles{Color: colText, FontSize: 12, MaxLines: 2})),
 		))
 	}
@@ -272,21 +272,21 @@ func (v *videoArea) welcome(finished bool) elements.Element {
 	a := v.u.a
 	head := elements.Box(styles.Styles{FlexDirection: properties.FlexDirectionColumn, Align: properties.AlignCenter, Gap: 10},
 		ic("logo", 56, colHighlight),
-		elements.Text("Drop a video here, or", styles.Styles{Color: colMuted, FontSize: 15}),
+		elements.Text(tr("Drop a video here, or"), styles.Styles{Color: colMuted, FontSize: 15}),
 		elements.Row(styles.Styles{Gap: 10, Wrap: properties.WrapNoWrap, Margin: properties.Inset{Top: 6}}, v.openBtn, v.urlBtn, v.folderBtn, v.netBtn),
 	)
 	if finished {
 		st := &a.player.State
 		note := displayTitle(st)
 		if n := len(st.Playlist); n > 1 {
-			note = "All " + plural(n, "file", "files") + " in the playlist have played."
+			note = tr("All {count} files in the playlist have played.", "count", n)
 		}
 		head = elements.Box(styles.Styles{FlexDirection: properties.FlexDirectionColumn, Align: properties.AlignCenter, Gap: 10},
-			elements.Text("Finished playing", styles.Styles{Color: colText, FontSize: 20, FontWeight: properties.FontWeightSemiBold}),
+			elements.Text(tr("Finished playing"), styles.Styles{Color: colText, FontSize: 20, FontWeight: properties.FontWeightSemiBold}),
 			elements.Box(styles.Styles{MaxWidth: 520},
 				elements.Text(note, styles.Styles{Color: colMuted, FontSize: 14, MaxLines: 2, TextAlign: properties.TextAlignCenter})),
 			elements.Box(styles.Styles{Margin: properties.Inset{Top: 6, Bottom: 10}}, v.againBtn),
-			elements.Text("Or open something else", styles.Styles{Color: colMuted, FontSize: 13}),
+			elements.Text(tr("Or open something else"), styles.Styles{Color: colMuted, FontSize: 13}),
 			elements.Row(styles.Styles{Gap: 10, Wrap: properties.WrapNoWrap}, v.openNextBtn, v.urlBtn, v.folderBtn, v.netBtn),
 		)
 	}
@@ -301,7 +301,7 @@ func (v *videoArea) welcome(finished bool) elements.Element {
 			recent = recent[:limit]
 		}
 		rows := []elements.Element{elements.Row(styles.Styles{Width: -1, Align: properties.AlignCenter, Wrap: properties.WrapNoWrap},
-			elements.Box(styles.Styles{FlexGrow: 1, Width: -1}, elements.Text("Recent", styles.Styles{Color: colMuted, FontSize: 12, FontWeight: properties.FontWeightSemiBold})),
+			elements.Box(styles.Styles{FlexGrow: 1, Width: -1}, elements.Text(tr("Recent"), styles.Styles{Color: colMuted, FontSize: 12, FontWeight: properties.FontWeightSemiBold})),
 			v.clearRecent(),
 		)}
 		for _, r := range recent {
@@ -327,8 +327,8 @@ func (v *videoArea) clearRecent() elements.Element {
 			if s.Hovered {
 				c = colText
 			}
-			return elements.Text("Clear", styles.Styles{Color: c, FontSize: 12})
-		}).Label("Clear recent").Focusable(false).OnClick(func(elements.ClickEvent) {
+			return elements.Text(tr("Clear"), styles.Styles{Color: c, FontSize: 12})
+		}).Label(tr("Clear recent")).Focusable(false).OnClick(func(elements.ClickEvent) {
 			a.history.Clear()
 			a.history.Save()
 		})
@@ -352,7 +352,7 @@ func (v *videoArea) recentRow(r library.Recent) elements.Element {
 			}
 			meta := where
 			if p := r.Progress(); p > 0.02 && p < 0.98 {
-				meta = player.FormatTime(r.Duration-r.Position) + " left · " + where
+				meta = tr("{time} left · {where}", "time", player.FormatTime(r.Duration-r.Position), "where", where)
 			}
 			body := []elements.Element{
 				elements.Text(r.Name(), styles.Styles{Color: colText, FontSize: 13, MaxLines: 1, TextOverflow: properties.TextOverflowEllipsis}),
@@ -396,14 +396,14 @@ func (v *videoArea) castScreen() elements.Element {
 	a := v.u.a
 	c := &a.cast
 	state := map[cast.State]string{
-		cast.StateLoading: "Loading on", cast.StatePlaying: "Playing on", cast.StatePaused: "Paused on",
-		cast.StateBuffering: "Buffering on", cast.StateIdle: "Connected to", cast.StateStopped: "Finished on",
+		cast.StateLoading: tr("Loading on"), cast.StatePlaying: tr("Playing on"), cast.StatePaused: tr("Paused on"),
+		cast.StateBuffering: tr("Buffering on"), cast.StateIdle: tr("Connected to"), cast.StateStopped: tr("Finished on"),
 	}[c.status.State]
 	if state == "" {
-		state = "Casting to"
+		state = tr("Casting to")
 	}
 	stop := elements.Keyed("cast", "stop", func() *button.Button {
-		return button.New("Stop Casting", styles.Styles{
+		return button.New(tr("Stop Casting"), styles.Styles{
 			Background: colSurface3, Color: colText, FontSize: 14, Padding: properties.SymmetricInset(18, 10), BorderRadius: 20,
 		}).OnClick(a.stopCasting)
 	})

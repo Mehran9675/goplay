@@ -1,6 +1,10 @@
 package player
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/mehran9675/giode/i18n"
+)
 
 // languages maps ISO 639-1 and 639-2 (B and T) codes to English names,
 // for the languages track tags commonly use.
@@ -32,14 +36,16 @@ func init() {
 	}
 }
 
-// LanguageName returns the English name of a language code, or the code
-// itself when unknown. Regional tags ("pt-BR") keep their region.
+// LanguageName returns the name of a language code in the interface's
+// language, or the code itself when unknown. Regional tags ("pt-BR")
+// keep their region.
 func LanguageName(code string) string {
 	base, region, _ := strings.Cut(strings.ToLower(code), "-")
 	name, ok := languages[base]
 	if !ok {
 		return code
 	}
+	name = i18n.Intl(name)
 	if region != "" {
 		return name + " (" + strings.ToUpper(region) + ")"
 	}

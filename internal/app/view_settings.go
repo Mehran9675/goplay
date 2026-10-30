@@ -58,23 +58,23 @@ func newPrefsView(u *ui) *prefsView {
 	}
 	p.scroll = scroll.New(func() elements.Element { return clearOfBar(p.pageContent()) }, scrollStyles())
 	p.keys = scroll.New(func() elements.Element { return clearOfBar(p.shortcutsContent()) }, scrollStyles())
-	p.done = primaryButton("Done", func() { u.dialogs.settingsOpen = false })
-	p.reset = secondaryButton("Reset All", func() {
+	p.done = primaryButton(tr("Done"), func() { u.dialogs.settingsOpen = false })
+	p.reset = secondaryButton(tr("Reset All"), func() {
 		a.settings.Reset()
 		for i := range settings.Defs {
 			a.applySetting(settings.Defs[i].Key)
 		}
-		a.toast("Settings reset to their defaults")
+		a.toast(tr("Settings reset to their defaults"))
 	})
-	p.folder = secondaryButton("Open Config Folder", a.openConfigFolder)
-	p.mpvConf = secondaryButton("Edit mpv.conf", func() { a.editConfigFile("mpv.conf") })
-	p.inputConf = secondaryButton("Edit input.conf", func() { a.editConfigFile("input.conf") })
-	p.resetKeys = secondaryButton("Reset All Shortcuts", func() {
+	p.folder = secondaryButton(tr("Open Config Folder"), a.openConfigFolder)
+	p.mpvConf = secondaryButton(tr("Edit mpv.conf"), func() { a.editConfigFile("mpv.conf") })
+	p.inputConf = secondaryButton(tr("Edit input.conf"), func() { a.editConfigFile("input.conf") })
+	p.resetKeys = secondaryButton(tr("Reset All Shortcuts"), func() {
 		a.settings.ResetKeys()
 		for _, act := range a.actions.All() {
 			a.actions.SetCustom(act.ID, nil)
 		}
-		a.toast("Shortcuts reset")
+		a.toast(tr("Shortcuts reset"))
 	})
 	return p
 }
@@ -95,6 +95,10 @@ func (p *prefsView) newControl(d *settings.Def, opts []settings.Option) *prefCon
 		labels := make([]string, len(opts))
 		for i, o := range opts {
 			labels[i] = o.Label
+			// Languages keep their own names; only Automatic is translated.
+			if d.Key != settings.KeyLanguage || o.Value == "" {
+				labels[i] = tr(o.Label)
+			}
 		}
 		c.sel = dropdown.New(styles.Styles{Background: colSurface2, Color: colText, BorderColor: colBorder,
 			BorderRadius: 8, Width: 250, FontSize: 13}, labels...).HoverColor(colSurface3).OnChange(func(i int) {
@@ -182,7 +186,7 @@ func (p *prefsView) sync() {
 func (p *prefsView) content() elements.Element {
 	p.sync()
 	pages := append(append([]string{}, settings.Sections...), shortcutsPage)
-	nav := []elements.Element{elements.Box(styles.Styles{Padding: properties.Inset{Left: 10, Bottom: 10}}, heading("Settings"))}
+	nav := []elements.Element{elements.Box(styles.Styles{Padding: properties.Inset{Left: 10, Bottom: 10}}, heading(tr("Settings")))}
 	for _, pg := range pages {
 		nav = append(nav, p.navItem(pg))
 	}
@@ -224,8 +228,8 @@ func (p *prefsView) navItem(page string) elements.Element {
 				bg, fg = colSurface2, colText
 			}
 			return elements.Box(styles.Styles{Width: -1, Background: bg, BorderRadius: 8, Padding: properties.SymmetricInset(10, 8)},
-				elements.Text(page, styles.Styles{Color: fg, FontSize: 13, FontWeight: properties.FontWeightMedium}))
-		}).Label(page).OnClick(func(elements.ClickEvent) {
+				elements.Text(tr(page), styles.Styles{Color: fg, FontSize: 13, FontWeight: properties.FontWeightMedium}))
+		}).Label(tr(page)).OnClick(func(elements.ClickEvent) {
 			p.page = page
 			p.capture = ""
 		})
@@ -246,13 +250,16 @@ func (p *prefsView) pageContent() elements.Element {
 
 func (p *prefsView) row(c *prefControl) elements.Element {
 	d := c.def
-	labels := []elements.Element{elements.Text(d.Label, styles.Styles{Color: colText, FontSize: 14})}
-	help := d.Help
+	labels := []elements.Element{elements.Text(tr(d.Label), styles.Styles{Color: colText, FontSize: 14})}
+	help := ""
+	if d.Help != "" {
+		help = tr(d.Help)
+	}
 	if d.Restart {
 		if help != "" {
 			help += " "
 		}
-		help += "Takes effect when GoPlay restarts."
+		help += tr("Takes effect when GoPlay restarts.")
 	}
 	if help != "" {
 		labels = append(labels, elements.Text(help, styles.Styles{Color: colFaint, FontSize: 12}))
@@ -282,10 +289,10 @@ func (p *prefsView) row(c *prefControl) elements.Element {
 // shortcutsContent lists every command with its shortcuts.
 func (p *prefsView) shortcutsContent() elements.Element {
 	a := p.u.a
-	rows := []elements.Element{note("Click a shortcut to change it, then press the new keys. Backspace removes it; Escape cancels.")}
+	rows := []elements.Element{note(tr("Click a shortcut to change it, then press the new keys. Backspace removes it; Escape cancels."))}
 	for _, cat := range a.actions.Categories() {
 		rows = append(rows, elements.Box(styles.Styles{Padding: properties.Inset{Top: 14, Bottom: 4}},
-			elements.Text(cat, styles.Styles{Color: colMuted, FontSize: 12, FontWeight: properties.FontWeightSemiBold})))
+			elements.Text(tr(cat), styles.Styles{Color: colMuted, FontSize: 12, FontWeight: properties.FontWeightSemiBold})))
 		for _, act := range a.actions.All() {
 			if act.Category != cat || act.Hidden {
 				continue
@@ -304,7 +311,7 @@ func (p *prefsView) shortcutRow(act *actions.Action) elements.Element {
 		chips = append(chips, p.chip(act.ID, i, actions.Display(k)))
 	}
 	if p.capture == act.ID && p.captureIdx < 0 {
-		chips = append(chips, keyChip("Press keys…", true))
+		chips = append(chips, keyChip(tr("Press keys…"), true))
 	} else if len(keys) < 3 {
 		chips = append(chips, p.chip(act.ID, -1, "+"))
 	}
@@ -315,28 +322,28 @@ func (p *prefsView) shortcutRow(act *actions.Action) elements.Element {
 				if s.Hovered {
 					c = colText
 				}
-				return elements.Text("Reset", styles.Styles{Color: c, FontSize: 12})
-			}).Label("Reset " + act.Title).OnClick(func(elements.ClickEvent) {
+				return elements.Text(tr("Reset"), styles.Styles{Color: c, FontSize: 12})
+			}).Label(tr("Reset {command}", "command", tr(act.Title))).OnClick(func(elements.ClickEvent) {
 				a.actions.SetCustom(act.ID, nil)
 				a.settings.SetKeys(act.ID, nil)
 			})
 		}))
 	}
 	return elements.Row(styles.Styles{Width: -1, Gap: 6, Align: properties.AlignCenter, Wrap: properties.WrapNoWrap, Padding: properties.SymmetricInset(0, 5)},
-		append([]elements.Element{elements.Box(styles.Styles{FlexGrow: 1, Width: -1}, elements.Text(act.Title, styles.Styles{Color: colText, FontSize: 13}))}, chips...)...)
+		append([]elements.Element{elements.Box(styles.Styles{FlexGrow: 1, Width: -1}, elements.Text(tr(act.Title), styles.Styles{Color: colText, FontSize: 13}))}, chips...)...)
 }
 
 // chip is a clickable shortcut; i is its index, or -1 for "add".
 func (p *prefsView) chip(id string, i int, text string) elements.Element {
 	capturing := p.capture == id && p.captureIdx == i
 	if capturing {
-		text = "Press keys…"
+		text = tr("Press keys…")
 	}
 	return elements.Keyed("shortcut-chip", id+"#"+strconv.Itoa(i), func() *elements.Pressable {
 		return elements.NewPressable(nil)
 	}).Content(func(s elements.PressState) elements.Element {
 		return keyChip(text, capturing || s.Hovered)
-	}).Label("Change shortcut").Focusable(false).OnClick(func(elements.ClickEvent) {
+	}).Label(tr("Change shortcut")).Focusable(false).OnClick(func(elements.ClickEvent) {
 		p.capture, p.captureIdx = id, i
 	})
 }
@@ -377,7 +384,7 @@ func (u *ui) captureKey(e key.Event) {
 		}
 		a.actions.SetCustom(owner.ID, rest)
 		a.settings.SetKeys(owner.ID, rest)
-		a.toast(actions.Display(sc) + " moved from “" + owner.Title + "”")
+		a.toast(tr("{shortcut} moved from “{command}”", "shortcut", actions.Display(sc), "command", tr(owner.Title)))
 	}
 	if idx >= 0 && idx < len(keys) {
 		keys[idx] = sc

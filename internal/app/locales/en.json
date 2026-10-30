@@ -1,0 +1,5 @@
+{
+ "{count} files added to the playlist": {"one": "1 file added to the playlist", "other": "{count} files added to the playlist"},
+ "{count} items": {"one": "1 item", "other": "{count} items"},
+ "All {count} files in the playlist have played.": {"one": "The file in the playlist has played.", "other": "All {count} files in the playlist have played."}
+}

@@ -64,13 +64,13 @@ func (a *App) registerCommands() {
 		when(toggle(act("ab_loop", "Repeat Section (A–B)", "Playback", k("B"), a.cycleABLoop), func() bool { return !math.IsNaN(st.ABLoopA) }), hasDuration),
 		when(toggle(act("loop_file", "Repeat This File", "Playback", k("R"), func() {
 			p.SetLoopFile(!st.LoopFile)
-			a.osd(onOff("Repeat", !st.LoopFile))
+			a.osd(onOff(tr("Repeat"), !st.LoopFile))
 		}), func() bool { return st.LoopFile }), hasMedia),
 		toggle(act("loop_playlist", "Repeat Playlist", "Playback", nil, func() {
 			p.SetLoopPlaylist(!st.LoopPlaylist)
-			a.osd(onOff("Repeat playlist", !st.LoopPlaylist))
+			a.osd(onOff(tr("Repeat playlist"), !st.LoopPlaylist))
 		}), func() bool { return st.LoopPlaylist }),
-		when(act("shuffle", "Shuffle Playlist", "Playback", nil, func() { p.PlaylistShuffle(); a.osd("Shuffled") }), hasPlaylist),
+		when(act("shuffle", "Shuffle Playlist", "Playback", nil, func() { p.PlaylistShuffle(); a.osd(tr("Shuffled")) }), hasPlaylist),
 
 		// Audio
 		repeat(act("volume_up", "Volume Up", "Audio", k("Up", "=", "+"), func() { a.addVolume(a.settings.Float(settings.KeyVolumeStep)) })),
@@ -156,9 +156,9 @@ func (a *App) applyKeyBindings() {
 
 func onOff(what string, on bool) string {
 	if on {
-		return what + ": on"
+		return tr("{what}: on", "what", what)
 	}
-	return what + ": off"
+	return tr("{what}: off", "what", what)
 }
 
 func (a *App) seekStep(large bool) float64 {
@@ -213,7 +213,7 @@ func (a *App) previous() {
 
 func (a *App) setSpeed(s float64) {
 	a.player.SetSpeed(s)
-	a.osd("Speed " + speedLabel(s))
+	a.osd(tr("Speed {speed}", "speed", speedLabel(s)))
 }
 
 func (a *App) stepSpeed(dir int) {
@@ -249,7 +249,7 @@ func (a *App) addVolume(d float64) {
 	if a.casting() {
 		v := math.Max(0, math.Min(1, a.cast.status.Volume+d/100))
 		a.castVolume(v)
-		a.osd(fmt.Sprintf("Volume %d%%", int(math.Round(v*100))))
+		a.osd(tr("Volume {percent}%", "percent", int(math.Round(v*100))))
 		return
 	}
 	v := st.Volume + d
@@ -261,7 +261,7 @@ func (a *App) addVolume(d float64) {
 	if max <= 0 {
 		max = 100
 	}
-	a.osdLevel(fmt.Sprintf("Volume %d%%", int(math.Round(math.Max(0, math.Min(max, v))))), math.Max(0, math.Min(max, v))/max)
+	a.osdLevel(tr("Volume {percent}%", "percent", int(math.Round(math.Max(0, math.Min(max, v))))), math.Max(0, math.Min(max, v))/max)
 }
 
 func (a *App) setVolume(v float64) {
@@ -274,19 +274,19 @@ func (a *App) setVolume(v float64) {
 func (a *App) toggleMute() {
 	m := !a.player.State.Muted
 	a.player.SetMute(m)
-	a.osd(onOff("Mute", m))
+	a.osd(onOff(tr("Mute"), m))
 }
 
 func (a *App) addAudioDelay(d float64) {
 	v := a.player.State.AudioDelay + d
 	a.player.SetAudioDelay(v)
-	a.osd(fmt.Sprintf("Audio delay %+.1f s", v))
+	a.osd(tr("Audio delay {seconds} s", "seconds", fmt.Sprintf("%+.1f", v)))
 }
 
 func (a *App) addSubDelay(d float64) {
 	v := a.player.State.SubDelay + d
 	a.player.SetSubDelay(v)
-	a.osd(fmt.Sprintf("Subtitle delay %+.1f s", v))
+	a.osd(tr("Subtitle delay {seconds} s", "seconds", fmt.Sprintf("%+.1f", v)))
 }
 
 func (a *App) scaleSubs(d float64) {
@@ -296,20 +296,20 @@ func (a *App) scaleSubs(d float64) {
 	}
 	v := math.Max(0.3, math.Min(4, cur+d))
 	a.player.Set("sub-scale", strconv.FormatFloat(v, 'f', 2, 64))
-	a.osd(fmt.Sprintf("Subtitle size %d%%", int(math.Round(v*100))))
+	a.osd(tr("Subtitle size {percent}%", "percent", int(math.Round(v*100))))
 }
 
 func (a *App) toggleSubtitles() {
 	st := &a.player.State
 	if _, on := st.SelectedTrack(player.Subtitle); on {
 		a.player.SelectTrack(player.Subtitle, 0)
-		a.osd("Subtitles off")
+		a.osd(tr("Subtitles off"))
 		return
 	}
 	subs := st.TracksOf(player.Subtitle)
 	if len(subs) > 0 {
 		a.player.SelectTrack(player.Subtitle, subs[0].ID)
-		a.osd("Subtitles: " + subs[0].Name())
+		a.osd(tr("Subtitles: {track}", "track", subs[0].Name()))
 	}
 }
 
@@ -332,14 +332,14 @@ func (a *App) cycleTrack(k player.TrackKind) {
 	if next >= len(tracks) {
 		if k == player.Subtitle {
 			a.player.SelectTrack(k, 0)
-			a.osd("Subtitles off")
+			a.osd(tr("Subtitles off"))
 			return
 		}
 		next = 0
 	}
 	a.player.SelectTrack(k, tracks[next].ID)
-	label := map[player.TrackKind]string{player.Video: "Video", player.Audio: "Audio", player.Subtitle: "Subtitles"}[k]
-	a.osd(label + ": " + tracks[next].Name())
+	label := map[player.TrackKind]string{player.Video: tr("Video"), player.Audio: tr("Audio"), player.Subtitle: tr("Subtitles")}[k]
+	a.osd(tr("{kind}: {track}", "kind", label, "track", tracks[next].Name()))
 }
 
 func (a *App) cycleABLoop() {
@@ -347,21 +347,21 @@ func (a *App) cycleABLoop() {
 	a.player.CycleABLoop()
 	switch {
 	case math.IsNaN(st.ABLoopA):
-		a.osd("Section start set — press again to set the end")
+		a.osd(tr("Section start set — press again to set the end"))
 	case math.IsNaN(st.ABLoopB):
-		a.osd("Repeating section")
+		a.osd(tr("Repeating section"))
 	default:
-		a.osd("Section repeat off")
+		a.osd(tr("Section repeat off"))
 	}
 }
 
 func (a *App) screenshot(mode string) {
 	if err := a.player.Screenshot(mode); err != nil {
-		a.toastError("Couldn't take a screenshot: " + err.Error())
+		a.toastError(tr("Couldn't take a screenshot: {error}", "error", err))
 		return
 	}
 	dir, _ := a.player.Get("screenshot-dir")
-	a.toast("Screenshot saved to " + dir)
+	a.toast(tr("Screenshot saved to {folder}", "folder", dir))
 }
 
 // Picture transforms, remembered for this file only.
@@ -370,25 +370,25 @@ func (a *App) rotate() {
 	cur, _ := a.player.Handle().Int("video-rotate")
 	next := int(cur+90) % 360
 	a.player.SetRotation(next)
-	a.osd(fmt.Sprintf("Rotation %d°", next))
+	a.osd(tr("Rotation {degrees}°", "degrees", next))
 }
 
 func (a *App) zoomBy(d float64) {
 	cur, _ := a.player.Handle().Double("video-zoom")
 	v := math.Max(-2, math.Min(3, cur+d))
 	a.player.SetZoom(v)
-	a.osd(fmt.Sprintf("Zoom %d%%", int(math.Round(math.Pow(2, v)*100))))
+	a.osd(tr("Zoom {percent}%", "percent", int(math.Round(math.Pow(2, v)*100))))
 }
 
 func (a *App) resetZoom() {
 	a.player.SetZoom(0)
 	a.player.SetPan(0, 0)
-	a.osd("Zoom 100%")
+	a.osd(tr("Zoom 100%"))
 }
 
 func (a *App) cycleFit() {
 	order := []string{"contain", "cover", "stretch"}
-	names := map[string]string{"contain": "Fit the window", "cover": "Fill the window", "stretch": "Stretch"}
+	names := map[string]string{"contain": tr("Fit the window"), "cover": tr("Fill the window"), "stretch": tr("Stretch")}
 	cur := a.settings.Get("fit")
 	next := order[0]
 	for i, f := range order {
@@ -408,11 +408,11 @@ func (a *App) toggleSetting(key, label string) {
 		v = "yes"
 	}
 	a.setSetting(key, v)
-	a.osd(onOff(label, on))
+	a.osd(onOff(tr(label), on))
 }
 
 func (a *App) toggleOnTop() {
 	on := !a.g.AlwaysOnTop()
 	a.setOnTop(on)
-	a.osd(onOff("Always on top", on))
+	a.osd(onOff(tr("Always on top"), on))
 }

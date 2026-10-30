@@ -68,7 +68,7 @@ func (a *App) stopCastScan() {
 func (a *App) castTo(d cast.Device) {
 	st := &a.player.State
 	if st.Idle {
-		a.toast("Open a video first, then cast it")
+		a.toast(tr("Open a video first, then cast it"))
 		return
 	}
 	a.stopCastScan()
@@ -85,14 +85,14 @@ func (a *App) castTo(d cast.Device) {
 		a.Post(func() {
 			a.cast.connecting = ""
 			if err != nil {
-				a.toastError("Couldn't cast to " + d.Name() + ": " + err.Error())
+				a.toastError(tr("Couldn't cast to {device}: {error}", "device", d.Name(), "error", err))
 				return
 			}
 			a.cast.session = s
 			a.cast.device = d.Name()
 			a.cast.path = item.Path
 			a.cast.status = cast.Status{State: cast.StateLoading, Position: item.Start, Duration: item.Duration, Volume: -1}
-			msg := "Casting to " + d.Name()
+			msg := tr("Casting to {device}", "device", d.Name())
 			if s.Converted() {
 				msg += " (converting with FFmpeg)"
 			}
@@ -184,7 +184,7 @@ func (a *App) stopCasting() {
 	if a.player.State.Path == a.cast.path && pos > 0 {
 		a.player.Seek(pos, false)
 	}
-	a.toast("Stopped casting to " + name)
+	a.toast(tr("Stopped casting to {device}", "device", name))
 	a.afterPlayerChange()
 }
 

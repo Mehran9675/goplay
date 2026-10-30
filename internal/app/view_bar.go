@@ -52,22 +52,22 @@ func newControlBar(u *ui) *controlBar {
 	b := &controlBar{u: u, seek: &seekBar{u: u}, tips: map[*iconbutton.Button]*tooltip.Tooltip{}, tipText: map[*iconbutton.Button]func() string{}}
 	run := func(id string) func() { return func() { a.actions.Run(id) } }
 
-	b.prev = ghostButton("previous", iconSize, "Previous", run("previous"))
-	b.next = ghostButton("next", iconSize, "Next", run("next"))
+	b.prev = ghostButton("previous", iconSize, tr("Previous"), run("previous"))
+	b.next = ghostButton("next", iconSize, tr("Next"), run("next"))
 	b.play = iconbutton.New(ic("play", playIconSize, colOnLight), styles.Styles{
 		Background:   colHighlight,
 		Width:        playSize,
 		Height:       playSize,
 		Padding:      properties.UniformInset((playSize - playIconSize) / 2),
 		BorderRadius: playSize / 2,
-	}).Label("Play").OnClick(func() {
+	}).Label(tr("Play")).OnClick(func() {
 		if a.player.State.Idle {
 			a.openFileDialog()
 			return
 		}
 		a.togglePause()
 	})
-	b.mute = ghostButton("volume-high", iconSize, "Mute", a.toggleMute)
+	b.mute = ghostButton("volume-high", iconSize, tr("Mute"), a.toggleMute)
 	b.vol = slider.New(styles.Styles{Color: colHighlight, Background: colTrack, BorderColor: colHighlight}).
 		OnChange(func(v float32) {
 			if a.casting() {
@@ -81,13 +81,13 @@ func newControlBar(u *ui) *controlBar {
 			a.setVolume(float64(v) * max)
 		})
 
-	b.normalize = ghostButton("normalize", iconSize, "Even out loudness", func() { a.toggleSetting("normalize", "Even out loudness") })
-	b.night = ghostButton("night", iconSize, "Night mode", func() { a.toggleSetting("night_mode", "Night mode") })
+	b.normalize = ghostButton("normalize", iconSize, tr("Even out loudness"), func() { a.toggleSetting("normalize", "Even out loudness") })
+	b.night = ghostButton("night", iconSize, tr("Night mode"), func() { a.toggleSetting("night_mode", "Night mode") })
 
-	b.subs = ghostButton("subtitles", iconSize, "Subtitles", nil)
+	b.subs = ghostButton("subtitles", iconSize, tr("Subtitles"), nil)
 	b.subsA = &anchor{el: b.subs}
 	b.subs.OnClick(func() { u.openMenuOver(u.subtitleMenu(), b.subsA) })
-	b.audio = ghostButton("audio", iconSize, "Audio", nil)
+	b.audio = ghostButton("audio", iconSize, tr("Audio"), nil)
 	b.audioA = &anchor{el: b.audio}
 	b.audio.OnClick(func() { u.openMenuOver(u.audioMenu(), b.audioA) })
 	b.speed = button.New("1×", styles.Styles{
@@ -96,13 +96,13 @@ func newControlBar(u *ui) *controlBar {
 	}).Variant(button.VariantGhost)
 	b.speedA = &anchor{el: b.speed}
 	b.speed.OnClick(func() { u.openMenuOver(u.speedMenu(), b.speedA) })
-	b.cast = ghostButton("cast", iconSize, "Cast", run("cast"))
+	b.cast = ghostButton("cast", iconSize, tr("Cast"), run("cast"))
 	b.castA = &anchor{el: b.cast}
-	b.list = ghostButton("playlist", iconSize, "Playlist", run("playlist"))
-	b.more = ghostButton("more", iconSize, "More", nil)
+	b.list = ghostButton("playlist", iconSize, tr("Playlist"), run("playlist"))
+	b.more = ghostButton("more", iconSize, tr("More"), nil)
 	b.moreA = &anchor{el: b.more}
 	b.more.OnClick(func() { u.openMenuOver(u.moreMenu(), b.moreA) })
-	b.full = ghostButton("fullscreen", iconSize, "Fullscreen", run("fullscreen"))
+	b.full = ghostButton("fullscreen", iconSize, tr("Fullscreen"), run("fullscreen"))
 
 	b.timeToggle = elements.NewPressable(func(s elements.PressState) elements.Element {
 		_, dur := a.timeline()
@@ -119,7 +119,7 @@ func newControlBar(u *ui) *controlBar {
 			c = colText
 		}
 		return timeText(text, c)
-	}).Label("Duration").Focusable(false).OnClick(func(elements.ClickEvent) {
+	}).Label(tr("Duration")).Focusable(false).OnClick(func(elements.ClickEvent) {
 		a.toggleSetting(settings.KeyRemainingTime, "Remaining time")
 	})
 
@@ -135,23 +135,23 @@ func newControlBar(u *ui) *controlBar {
 			return title
 		}
 	}
-	tip(b.prev, key("Previous", "previous"))
-	tip(b.next, key("Next", "next"))
+	tip(b.prev, key(tr("Previous"), "previous"))
+	tip(b.next, key(tr("Next"), "next"))
 	tip(b.play, func() string {
 		if a.player.State.Idle {
-			return "Open a file"
+			return tr("Open a file")
 		}
-		return key("Play / Pause", "play_pause")()
+		return key(tr("Play / Pause"), "play_pause")()
 	})
-	tip(b.mute, key("Mute", "mute"))
-	tip(b.normalize, func() string { return onOff("Even out loudness", a.settings.Bool("normalize")) })
-	tip(b.night, func() string { return onOff("Night mode", a.settings.Bool("night_mode")) })
-	tip(b.subs, key("Subtitles", "subs_toggle"))
-	tip(b.audio, func() string { return "Audio" })
-	tip(b.cast, key("Cast", "cast"))
-	tip(b.list, key("Playlist", "playlist"))
-	tip(b.more, func() string { return "More" })
-	tip(b.full, key("Fullscreen", "fullscreen"))
+	tip(b.mute, key(tr("Mute"), "mute"))
+	tip(b.normalize, func() string { return onOff(tr("Even out loudness"), a.settings.Bool("normalize")) })
+	tip(b.night, func() string { return onOff(tr("Night mode"), a.settings.Bool("night_mode")) })
+	tip(b.subs, key(tr("Subtitles"), "subs_toggle"))
+	tip(b.audio, func() string { return tr("Audio") })
+	tip(b.cast, key(tr("Cast"), "cast"))
+	tip(b.list, key(tr("Playlist"), "playlist"))
+	tip(b.more, func() string { return tr("More") })
+	tip(b.full, key(tr("Fullscreen"), "fullscreen"))
 	return b
 }
 

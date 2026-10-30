@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"strconv"
 	"slices"
 	"strings"
 	"sync"
@@ -62,13 +61,13 @@ func newNetMedia(u *ui) *netMedia {
 	n.list = virtuallist.New(func() int { return len(n.entries) }, 52, gapped(n.row), listStyles()).
 		OnActivate(n.activate).
 		ClickFocusesRow(false)
-	n.back = secondaryButton("Back", n.up)
-	n.rescan = secondaryButton("Search Again", n.scan)
-	n.playAll = primaryButton("Play All", func() { n.play(0) })
-	n.closeBtn = secondaryButton("Close", func() { n.open = false })
-	n.addrInput = input.New("A server's address, like 192.168.1.20 or 192.168.1.20:8096", fieldStyles()).Keyboard(input.KeyboardURL).
+	n.back = secondaryButton(tr("Back"), n.up)
+	n.rescan = secondaryButton(tr("Search Again"), n.scan)
+	n.playAll = primaryButton(tr("Play All"), func() { n.play(0) })
+	n.closeBtn = secondaryButton(tr("Close"), func() { n.open = false })
+	n.addrInput = input.New(tr("A server's address, like 192.168.1.20 or 192.168.1.20:8096"), fieldStyles()).Keyboard(input.KeyboardURL).
 		Submit(n.addAddress)
-	n.addBtn = secondaryButton("Add", func() { n.addAddress(n.addrInput.Text()) })
+	n.addBtn = secondaryButton(tr("Add"), func() { n.addAddress(n.addrInput.Text()) })
 	n.dlg = dialog.New(&n.open, n.content, dialogStyles(600))
 	return n
 }
@@ -202,7 +201,7 @@ func (n *netMedia) load() {
 			}
 			n.loading = false
 			if err != nil {
-				n.err = "Couldn't open this folder: " + err.Error()
+				n.err = tr("Couldn't open this folder: {error}", "error", err)
 				return
 			}
 			n.entries = entries
@@ -278,11 +277,11 @@ func (n *netMedia) content() elements.Element {
 	}
 	switch {
 	case n.loading:
-		rows = append(rows, busy("Opening…"))
+		rows = append(rows, busy(tr("Opening…")))
 	case n.err != "":
 		rows = append(rows, note(n.err))
 	case len(n.entries) == 0:
-		rows = append(rows, note("There's no video or music in this folder."))
+		rows = append(rows, note(tr("There's no video or music in this folder.")))
 	default:
 		h := min(len(n.entries), 8) * 52
 		rows = append(rows, elements.Box(styles.Styles{Width: -1, Height: properties.Height(h)}, n.list))
@@ -300,20 +299,20 @@ func (n *netMedia) content() elements.Element {
 
 func (n *netMedia) serversContent() elements.Element {
 	rows := []elements.Element{
-		heading("Media on your network"),
-		note("Videos and music shared by computers, NAS drives and media servers (DLNA/UPnP) on this network."),
+		heading(tr("Media on your network")),
+		note(tr("Videos and music shared by computers, NAS drives and media servers (DLNA/UPnP) on this network.")),
 	}
 	for _, s := range n.servers {
 		rows = append(rows, n.serverRow(s))
 	}
 	if n.scanning {
-		rows = append(rows, busy("Looking for media servers…"))
+		rows = append(rows, busy(tr("Looking for media servers…")))
 	} else if len(n.servers) == 0 {
-		rows = append(rows, note("No media servers found. Make sure sharing is on and they're on the same network as this computer, "+
-			"or add a server's address below."))
+		rows = append(rows, note(tr("No media servers found. Make sure sharing is on and they're on the same network as this computer, " +
+			"or add a server's address below.")))
 	}
 	for _, addr := range n.silent {
-		rows = append(rows, note("No media server answered at "+addr+". Saved addresses are in Settings › Casting."))
+		rows = append(rows, note(tr("No media server answered at {address}. Saved addresses are in Settings › Casting.", "address", addr)))
 	}
 	rows = append(rows,
 		elements.Row(styles.Styles{Width: -1, Gap: 8, Align: properties.AlignCenter, Wrap: properties.WrapNoWrap, Margin: properties.Inset{Top: 6}},
@@ -363,7 +362,7 @@ func (n *netMedia) row(i int) elements.Element {
 			case e.Folder:
 				icon = "folder"
 				if e.Count >= 0 {
-					sub = strconv.Itoa(e.Count) + " items"
+					sub = tr("{count} items", "count", e.Count)
 				}
 			case e.Audio && !e.Video:
 				icon = "audio"

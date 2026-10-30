@@ -36,6 +36,11 @@ Made for macOS first, and built for Windows and Linux too.
 - Click to pause, double-click for fullscreen, wheel for volume (or seeking).
 - A command palette (Ctrl+K, ⌘K on macOS) for every command, and every
   shortcut can be changed.
+- In English and 26 other European languages: Bulgarian, Catalan, Croatian,
+  Czech, Danish, Dutch, Estonian, Finnish, French, German, Greek, Hungarian,
+  Italian, Latvian, Lithuanian, Norwegian, Polish, Portuguese, Romanian,
+  Russian, Serbian, Slovak, Slovenian, Spanish, Swedish and Ukrainian. GoPlay
+  follows the system's language, or the one picked in Settings › General.
 
 **Picture and sound**
 - Video, audio and subtitle tracks, a second subtitle line, external
@@ -131,7 +136,8 @@ giode run
 The CLI puts libmpv, ANGLE and the DLLs they need next to `GoPlay.exe`.
 
 Optional at runtime: **yt-dlp** for web pages, **FFmpeg** for casting files
-TVs can't play, and on Linux **zenity** for file dialogs.
+TVs can't play, and on Linux without a desktop portal **zenity** for folder
+dialogs.
 
 Publishing a release builds and tests it with the giode CLI on macOS (Apple
 silicon), and on Linux and Windows for both x64 and ARM64, then attaches the

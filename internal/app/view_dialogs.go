@@ -106,12 +106,12 @@ func newDialogs(u *ui) *dialogs {
 	// Open URL.
 	d.urlInput = input.New("https://…", fieldStyles()).Keyboard(input.KeyboardURL).
 		Submit(func(s string) { d.urlOpen = false; a.openURL(s) })
-	openBtn := primaryButton("Open", func() { d.urlOpen = false; a.openURL(d.urlInput.Text()) })
-	cancelURL := secondaryButton("Cancel", func() { d.urlOpen = false })
+	openBtn := primaryButton(tr("Open"), func() { d.urlOpen = false; a.openURL(d.urlInput.Text()) })
+	cancelURL := secondaryButton(tr("Cancel"), func() { d.urlOpen = false })
 	d.url = dialog.New(&d.urlOpen, func() elements.Element {
 		return column(12,
-			heading("Open URL"),
-			note("A video or stream link, or a page from YouTube, Vimeo, Twitch and thousands of other sites."),
+			heading(tr("Open URL")),
+			note(tr("A video or stream link, or a page from YouTube, Vimeo, Twitch and thousands of other sites.")),
 			d.urlInput,
 			buttonsRow(cancelURL, openBtn))
 	}, dialogStyles(520))
@@ -119,22 +119,22 @@ func newDialogs(u *ui) *dialogs {
 	// Go to time.
 	d.jumpInput = input.New("1:23:45, 83, or 50%", fieldStyles()).
 		Submit(func(s string) { d.jumpTo(s) })
-	goBtn := primaryButton("Go", func() { d.jumpTo(d.jumpInput.Text()) })
-	cancelJump := secondaryButton("Cancel", func() { d.jumpOpen = false })
+	goBtn := primaryButton(tr("Go"), func() { d.jumpTo(d.jumpInput.Text()) })
+	cancelJump := secondaryButton(tr("Cancel"), func() { d.jumpOpen = false })
 	d.jump = dialog.New(&d.jumpOpen, func() elements.Element {
-		return column(12, heading("Go to Time"), d.jumpInput, buttonsRow(cancelJump, goBtn))
+		return column(12, heading(tr("Go to Time")), d.jumpInput, buttonsRow(cancelJump, goBtn))
 	}, dialogStyles(360))
 
 	d.net = newNetMedia(u)
 
 	// Cast.
-	rescan := secondaryButton("Search Again", a.startCastScan)
-	stopCast := secondaryButton("Stop Casting", func() { a.stopCasting(); d.castOpen = false })
-	closeCast := secondaryButton("Close", func() { d.castOpen = false })
+	rescan := secondaryButton(tr("Search Again"), a.startCastScan)
+	stopCast := secondaryButton(tr("Stop Casting"), func() { a.stopCasting(); d.castOpen = false })
+	closeCast := secondaryButton(tr("Close"), func() { d.castOpen = false })
 	d.cast = dialog.New(&d.castOpen, func() elements.Element { return d.castContent(rescan, stopCast, closeCast) }, dialogStyles(460))
 
 	// Command palette.
-	d.paletteInput = input.New("Type a command…", fieldStyles()).
+	d.paletteInput = input.New(tr("Type a command…"), fieldStyles()).
 		Submit(func(string) { d.runMatch(0) })
 	d.paletteList = virtuallist.New(func() int { return len(d.matches) }, 40, gapped(d.paletteRow), listStyles()).
 		OnActivate(d.runMatch).ClickFocusesRow(false)
@@ -142,14 +142,14 @@ func newDialogs(u *ui) *dialogs {
 		d.matches = a.actions.Search(d.paletteInput.Text())
 		h := min(len(d.matches), 9) * 40
 		if h == 0 {
-			return column(10, d.paletteInput, note("No matching command."))
+			return column(10, d.paletteInput, note(tr("No matching command.")))
 		}
 		return column(10, d.paletteInput, elements.Box(styles.Styles{Width: -1, Height: properties.Height(h)}, d.paletteList))
 	}, dialogStyles(560))
 
 	// Log.
-	copyLog := secondaryButton("Copy", func() { a.g.SetClipboard(strings.Join(d.lines, "\n")); a.toast("Log copied") })
-	closeLog := secondaryButton("Close", func() { d.logOpen = false })
+	copyLog := secondaryButton(tr("Copy"), func() { a.g.SetClipboard(strings.Join(d.lines, "\n")); a.toast(tr("Log copied")) })
+	closeLog := secondaryButton(tr("Close"), func() { d.logOpen = false })
 	d.logList = virtuallist.New(func() int { return len(d.lines) }, 20, gapped(func(i int) elements.Element {
 		if i >= len(d.lines) {
 			return elements.Box(styles.Styles{})
@@ -160,22 +160,22 @@ func newDialogs(u *ui) *dialogs {
 		d.lines = a.logLines()
 		body := elements.Element(elements.Box(styles.Styles{Width: -1, Height: 420}, d.logList))
 		if len(d.lines) == 0 {
-			body = note("Nothing logged yet. Raise “mpv log detail” in Settings › Advanced for more.")
+			body = note(tr("Nothing logged yet. Raise “mpv log detail” in Settings › Advanced for more."))
 		}
-		return column(12, heading("mpv Log"), body, buttonsRow(copyLog, closeLog))
+		return column(12, heading(tr("mpv Log")), body, buttonsRow(copyLog, closeLog))
 	}, dialogStyles(760))
 
 	// About.
-	site := secondaryButton("Website", func() { openWebPage("https://github.com/Mehran9675/goplay") })
-	closeAbout := primaryButton("Close", func() { d.aboutOpen = false })
+	site := secondaryButton(tr("Website"), func() { openWebPage("https://github.com/Mehran9675/goplay") })
+	closeAbout := primaryButton(tr("Close"), func() { d.aboutOpen = false })
 	d.about = dialog.New(&d.aboutOpen, func() elements.Element {
 		mpvVersion, _ := a.player.Get("mpv-version")
 		ffVersion, _ := a.player.Get("ffmpeg-version")
 		return column(10,
 			elements.Row(styles.Styles{Gap: 12, Align: properties.AlignCenter}, ic("logo", 40, colHighlight), heading("GoPlay")),
-			note("Version "+Version),
-			note("Plays nearly anything with "+mpvVersion+" and FFmpeg "+ffVersion+"."),
-			note("Interface built with Giode and Gio. Icons from Material Design."),
+			note(tr("Version {version}", "version", Version)),
+			note(tr("Plays nearly anything with {mpv} and FFmpeg {ffmpeg}.", "mpv", mpvVersion, "ffmpeg", ffVersion)),
+			note(tr("Interface built with Giode and Gio. Icons from Material Design.")),
 			buttonsRow(site, closeAbout))
 	}, dialogStyles(440))
 
@@ -244,7 +244,7 @@ func (d *dialogs) jumpTo(s string) {
 	a := d.u.a
 	t, ok := parseTimeInput(s, a.player.State.Duration)
 	if !ok {
-		a.toastError("That isn't a time: try 1:23:45, 83 or 50%")
+		a.toastError(tr("That isn't a time: try 1:23:45, 83 or 50%"))
 		return
 	}
 	d.jumpOpen = false
@@ -281,24 +281,24 @@ func (u *ui) showCast() {
 func (d *dialogs) castContent(rescan, stop, closeBtn *button.Button) elements.Element {
 	a := d.u.a
 	c := &a.cast
-	rows := []elements.Element{heading("Cast to a device")}
+	rows := []elements.Element{heading(tr("Cast to a device"))}
 	if a.casting() {
-		rows = append(rows, note("Playing on "+c.device+"."), buttonsRow(stop, closeBtn))
+		rows = append(rows, note(tr("Playing on {device}.", "device", c.device)), buttonsRow(stop, closeBtn))
 		return column(12, rows...)
 	}
-	rows = append(rows, note("Chromecast, Google TV and Android TV, and smart TVs, consoles and receivers that support DLNA."))
+	rows = append(rows, note(tr("Chromecast, Google TV and Android TV, and smart TVs, consoles and receivers that support DLNA.")))
 	if c.connecting != "" {
 		rows = append(rows, elements.Row(styles.Styles{Gap: 10, Align: properties.AlignCenter},
-			spinner.Spinner(styles.Styles{Width: 18, Height: 18, Color: colText}), note("Connecting to "+c.connecting+"…")))
+			spinner.Spinner(styles.Styles{Width: 18, Height: 18, Color: colText}), note(tr("Connecting to {device}…", "device", c.connecting))))
 	}
 	for _, dev := range c.devices {
 		rows = append(rows, d.deviceRow(dev))
 	}
 	if c.scanning {
 		rows = append(rows, elements.Row(styles.Styles{Gap: 10, Align: properties.AlignCenter, Padding: properties.SymmetricInset(4, 6)},
-			spinner.Spinner(styles.Styles{Width: 18, Height: 18, Color: colMuted}), note("Looking for devices on your network…")))
+			spinner.Spinner(styles.Styles{Width: 18, Height: 18, Color: colMuted}), note(tr("Looking for devices on your network…"))))
 	} else if len(c.devices) == 0 {
-		rows = append(rows, note("No devices found. Make sure they're on and on the same network as this computer."))
+		rows = append(rows, note(tr("No devices found. Make sure they're on and on the same network as this computer.")))
 	}
 	rows = append(rows, buttonsRow(rescan, closeBtn))
 	return column(10, rows...)
@@ -370,15 +370,15 @@ func (d *dialogs) paletteRow(i int) elements.Element {
 			titleColor = colFaint
 		}
 		children := []elements.Element{
-			elements.Box(styles.Styles{FlexGrow: 1, Width: -1}, elements.Text(act.Title, styles.Styles{Color: titleColor, FontSize: 14})),
-			elements.Text(act.Category, styles.Styles{Color: colFaint, FontSize: 12}),
+			elements.Box(styles.Styles{FlexGrow: 1, Width: -1}, elements.Text(tr(act.Title), styles.Styles{Color: titleColor, FontSize: 14})),
+			elements.Text(tr(act.Category), styles.Styles{Color: colFaint, FontSize: 12}),
 		}
 		if ks := a.actions.Keys(act.ID); len(ks) > 0 {
 			children = append(children, keyChip(actions.Display(ks[0]), false))
 		}
 		return elements.Row(styles.Styles{Width: -1, Height: -1, Gap: 10, Align: properties.AlignCenter, Padding: properties.SymmetricInset(10, 0),
 			Background: bg, BorderRadius: 8, Wrap: properties.WrapNoWrap}, children...)
-	}).Label(act.Title).OnClick(func(elements.ClickEvent) { d.runMatch(i) })
+	}).Label(tr(act.Title)).OnClick(func(elements.ClickEvent) { d.runMatch(i) })
 }
 
 // keyChip shows a shortcut like a keycap.

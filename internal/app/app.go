@@ -119,6 +119,8 @@ func New(files, commands []string, icon []byte) (*App, error) {
 
 	a.g = giode.New(giode.Config{
 		Title:       "GoPlay",
+		Locale:      uiLocale(a.settings.Get(settings.KeyLanguage)),
+		Intl:        intlOptions,
 		Size:        image.Pt(960, 600),
 		MinSize:     image.Pt(360, 240),
 		Resizable:   true,
@@ -309,7 +311,7 @@ func (a *App) drawVideo(t giode.GPUTarget) {
 			a.rendFailed = true
 			a.appendLog("error", "render", err.Error())
 			a.Post(func() {
-				a.toastError("Couldn't start video output: " + err.Error())
+				a.toastError(tr("Couldn't start video output: {error}", "error", err))
 				a.runStarting()
 			})
 			return
@@ -510,9 +512,9 @@ func (a *App) fileEnded(reason int, err error) {
 	if reason == mpv.EndError {
 		name := filepath.Base(a.player.State.Path)
 		if name == "." || name == "" {
-			name = "the file"
+			name = tr("the file")
 		}
-		msg := "Couldn't play " + name
+		msg := tr("Couldn't play {name}", "name", name)
 		if err != nil {
 			msg += ": " + err.Error()
 		}
@@ -574,7 +576,7 @@ func (a *App) shutdown() {
 func (a *App) runCommands(ids []string) {
 	for _, id := range ids {
 		if a.actions.Get(id) == nil {
-			a.toastError("Unknown command: " + id)
+			a.toastError(tr("Unknown command: {command}", "command", id))
 			continue
 		}
 		a.actions.Run(id)

@@ -1,15 +1,14 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"image"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
-
-	"github.com/ncruces/zenity"
 
 	"github.com/mehran9675/giode"
 	"github.com/mehran9675/goplay/internal/library"
@@ -19,33 +18,43 @@ import (
 
 func isURL(s string) bool { return library.IsURL(s) }
 
-// mediaFilter is the file dialogs' filter for video and audio files.
-func mediaFilter() zenity.FileFilters {
-	var pats []string
-	for ext := range library.MediaExts {
-		pats = append(pats, "*"+ext)
+// mediaTypes and subtitleTypes are what the file pickers offer.
+func mediaTypes() []string    { return extList(library.MediaExts) }
+func subtitleTypes() []string { return extList(library.SubtitleExts) }
+
+func extList(exts map[string]bool) []string {
+	var out []string
+	for ext := range exts {
+		out = append(out, ext)
 	}
-	return zenity.FileFilters{{Name: "Video and audio", Patterns: pats, CaseFold: true}}
+	return out
 }
 
-func subtitleFilter() zenity.FileFilters {
-	var pats []string
-	for ext := range library.SubtitleExts {
-		pats = append(pats, "*"+ext)
-	}
-	return zenity.FileFilters{{Name: "Subtitles", Patterns: pats, CaseFold: true}}
+// pick shows the file picker off the UI goroutine (it blocks) and hands
+// the paths back with Post.
+func (a *App) pick(types []string, multiple bool, then func([]string)) {
+	a.picked(func() ([]string, error) {
+		files, err := a.g.PickFiles(context.Background(), giode.PickOptions{Types: types, Multiple: multiple})
+		var paths []string
+		for _, f := range files {
+			f.Close()
+			if f.Path != "" {
+				paths = append(paths, f.Path)
+			}
+		}
+		return paths, err
+	}, then)
 }
 
-// dialog runs a native file dialog off the UI goroutine (it blocks) and
-// hands the result back with Post.
-func (a *App) dialog(show func() ([]string, error), then func([]string)) {
+// picked runs a picker and hands its paths to then on the UI goroutine.
+func (a *App) picked(show func() ([]string, error), then func([]string)) {
 	go func() {
 		paths, err := show()
 		a.Post(func() {
 			switch {
-			case err == zenity.ErrCanceled:
+			case errors.Is(err, giode.ErrCanceled):
 			case err != nil:
-				a.toastError("The file dialog failed: " + err.Error())
+				a.toastError(tr("The file dialog failed: {error}", "error", err))
 			case len(paths) > 0:
 				then(paths)
 			}
@@ -54,48 +63,38 @@ func (a *App) dialog(show func() ([]string, error), then func([]string)) {
 }
 
 func (a *App) openFileDialog() {
-	a.dialog(func() ([]string, error) {
-		return zenity.SelectFileMultiple(zenity.Title("Open"), mediaFilter())
-	}, func(p []string) { a.openItems(p, false) })
+	a.pick(mediaTypes(), true, func(p []string) { a.openItems(p, false) })
 }
 
 func (a *App) openFolderDialog() {
-	a.dialog(func() ([]string, error) {
-		d, err := zenity.SelectFile(zenity.Title("Open Folder"), zenity.Directory())
+	a.picked(func() ([]string, error) {
+		d, err := a.g.PickFolder(context.Background(), giode.FolderOptions{Title: tr("Open Folder")})
 		return []string{d}, err
 	}, func(p []string) { a.openItems(p, false) })
 }
 
 func (a *App) addFilesDialog() {
-	a.dialog(func() ([]string, error) {
-		return zenity.SelectFileMultiple(zenity.Title("Add to Playlist"), mediaFilter())
-	}, func(p []string) { a.openItems(p, true) })
+	a.pick(mediaTypes(), true, func(p []string) { a.openItems(p, true) })
 }
 
 func (a *App) loadSubtitleDialog() {
-	a.dialog(func() ([]string, error) {
-		f, err := zenity.SelectFile(zenity.Title("Load Subtitles"), subtitleFilter())
-		return []string{f}, err
-	}, func(p []string) { a.addSubtitle(p[0]) })
+	a.pick(subtitleTypes(), false, func(p []string) { a.addSubtitle(p[0]) })
 }
 
 func (a *App) loadAudioDialog() {
-	a.dialog(func() ([]string, error) {
-		f, err := zenity.SelectFile(zenity.Title("Load Audio Track"), mediaFilter())
-		return []string{f}, err
-	}, func(p []string) {
+	a.pick(mediaTypes(), false, func(p []string) {
 		if err := a.player.AddAudio(p[0]); err != nil {
-			a.toastError("Couldn't load the audio track: " + err.Error())
+			a.toastError(tr("Couldn't load the audio track: {error}", "error", err))
 		}
 	})
 }
 
 func (a *App) addSubtitle(path string) {
 	if err := a.player.AddSubtitle(path); err != nil {
-		a.toastError("Couldn't load the subtitles: " + err.Error())
+		a.toastError(tr("Couldn't load the subtitles: {error}", "error", err))
 		return
 	}
-	a.osd("Subtitles: " + filepath.Base(path))
+	a.osd(tr("Subtitles: {track}", "track", filepath.Base(path)))
 }
 
 // openItems plays files, folders and URLs, or adds them to the playlist.
@@ -110,7 +109,7 @@ func (a *App) openItems(items []string, appendToPlaylist bool) {
 	}
 	list, start := library.Expand(items, !appendToPlaylist && a.settings.Bool(settings.KeyQueueFolder))
 	if len(list) == 0 {
-		a.toastError("There's nothing to play there.")
+		a.toastError(tr("There's nothing to play there."))
 		return
 	}
 	if err := a.player.Open(list, appendToPlaylist); err != nil {
@@ -118,7 +117,7 @@ func (a *App) openItems(items []string, appendToPlaylist bool) {
 		return
 	}
 	if appendToPlaylist {
-		a.toast(plural(len(list), "file", "files") + " added to the playlist")
+		a.toast(tr("{count} files added to the playlist", "count", len(list)))
 		return
 	}
 	if start > 0 {
@@ -127,13 +126,6 @@ func (a *App) openItems(items []string, appendToPlaylist bool) {
 	if a.casting() {
 		a.Post(a.castCurrent)
 	}
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return "1 " + one
-	}
-	return strconv.Itoa(n) + " " + many
 }
 
 // dropped handles files dropped on the window: subtitle files join the
@@ -159,7 +151,7 @@ func (a *App) openClipboard() {
 func (a *App) openText(text string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
-		a.toast("The clipboard is empty")
+		a.toast(tr("The clipboard is empty"))
 		return
 	}
 	var items []string
@@ -170,7 +162,7 @@ func (a *App) openText(text string) {
 	}
 	for _, it := range items {
 		if _, err := os.Stat(it); err != nil && !isURL(it) {
-			a.toast("The clipboard doesn't hold a link or a file")
+			a.toast(tr("The clipboard doesn't hold a link or a file"))
 			return
 		}
 	}
@@ -213,7 +205,7 @@ func (a *App) revealCurrent() {
 
 func (a *App) copyCurrentPath() {
 	a.g.SetClipboard(a.player.State.Path)
-	a.toast("Copied")
+	a.toast(tr("Copied"))
 }
 
 // openConfigFolder opens goplay's configuration folder, where settings,
@@ -247,7 +239,7 @@ func (a *App) editConfigFile(name string) {
 		cmd = exec.Command("xdg-open", path)
 	}
 	startDetached(cmd)
-	a.toast(name + " is read when GoPlay starts")
+	a.toast(tr("{file} is read when GoPlay starts", "file", name))
 }
 
 var configTemplates = map[string]string{
@@ -328,6 +320,10 @@ func (a *App) applySetting(key string) {
 	}
 	v := a.settings.Get(key)
 	switch key {
+	case settings.KeyLanguage:
+		giode.SetLocale(uiLocale(v))
+		a.rebuildUI()
+		return
 	case settings.KeyAlwaysOnTop:
 		a.setOnTop(v == "yes")
 	case settings.KeyAudioDevice:
@@ -346,7 +342,7 @@ func (a *App) applySetting(key string) {
 		}
 	}
 	if d.Restart {
-		a.toast(d.Label + ": takes effect when GoPlay restarts")
+		a.toast(tr("{setting}: takes effect when GoPlay restarts", "setting", tr(d.Label)))
 		return
 	}
 	var opts []settings.MPVOption
@@ -357,7 +353,7 @@ func (a *App) applySetting(key string) {
 	}
 	for _, o := range opts {
 		if err := a.player.Set(o.Name, o.Value); err != nil {
-			a.toastError(d.Label + ": mpv didn't accept " + o.Name + "=" + o.Value)
+			a.toastError(tr("{setting}: mpv didn't accept {option}", "setting", tr(d.Label), "option", o.Name+"="+o.Value))
 		}
 	}
 }

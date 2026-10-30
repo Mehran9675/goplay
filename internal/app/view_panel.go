@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/mehran9675/giode/components/iconbutton"
@@ -34,7 +33,7 @@ type sidePanel struct {
 func newSidePanel(u *ui) *sidePanel {
 	a := u.a
 	p := &sidePanel{u: u}
-	p.tabs = segmented.New("Playlist", "Chapters").OnChange(func(i int) { u.panelTab = i })
+	p.tabs = segmented.New(tr("Playlist"), tr("Chapters")).OnChange(func(i int) { u.panelTab = i })
 	p.tabs.Styles(styles.Styles{Width: -1, Background: colSurface2, BorderColor: colSurface3, Color: colText, FontSize: 13})
 	st := &a.player.State
 	p.playlist = virtuallist.New(func() int { return len(st.Playlist) }, 52, gapped(p.playlistRow),
@@ -45,10 +44,10 @@ func newSidePanel(u *ui) *sidePanel {
 		listStyles()).
 		OnActivate(func(i int) { a.player.SetChapter(i) }).
 		ClickFocusesRow(false)
-	p.close = ghostButton("close", 18, "Close", func() { u.panelOpen = false })
-	p.add = ghostButton("add", 20, "Add files", a.addFilesDialog)
-	p.shuffle = ghostButton("shuffle", 20, "Shuffle", func() { a.actions.Run("shuffle") })
-	p.clear = ghostButton("delete", 20, "Clear the rest", func() { a.player.PlaylistClear() })
+	p.close = ghostButton("close", 18, tr("Close"), func() { u.panelOpen = false })
+	p.add = ghostButton("add", 20, tr("Add files"), a.addFilesDialog)
+	p.shuffle = ghostButton("shuffle", 20, tr("Shuffle"), func() { a.actions.Run("shuffle") })
+	p.clear = ghostButton("delete", 20, tr("Clear the rest"), func() { a.player.PlaylistClear() })
 	return p
 }
 
@@ -80,17 +79,17 @@ func (p *sidePanel) content() elements.Element {
 	switch u.panelTab {
 	case panelChapters:
 		if len(st.Chapters) == 0 {
-			body = emptyNote("This file has no chapters.")
+			body = emptyNote(tr("This file has no chapters."))
 		} else {
 			body = elements.Box(styles.Styles{FlexGrow: 1, Width: -1, Height: -1}, p.chapters)
 		}
 	default:
 		if len(st.Playlist) == 0 {
-			body = emptyNote("Nothing queued. Open a folder, or add files.")
+			body = emptyNote(tr("Nothing queued. Open a folder, or add files."))
 		} else {
 			body = elements.Box(styles.Styles{FlexGrow: 1, Width: -1, Height: -1}, p.playlist)
 		}
-		count := plural(len(st.Playlist), "item", "items")
+		count := tr("{count} items", "count", len(st.Playlist))
 		footer = elements.Row(styles.Styles{Width: -1, Align: properties.AlignCenter, Gap: 4, Wrap: properties.WrapNoWrap},
 			elements.Box(styles.Styles{FlexGrow: 1, Width: -1}, elements.Text(count, styles.Styles{Color: colMuted, FontSize: 12})),
 			p.add, p.shuffle, p.clear)
@@ -119,7 +118,7 @@ func (p *sidePanel) playlistRow(i int) elements.Element {
 	e := st.Playlist[i]
 	current := i == st.PlaylistPos
 	remove := elements.Keyed("playlist-remove", e.Filename+"#"+strconv.Itoa(i), func() *iconbutton.Button {
-		return ghostButton("close", 16, "Remove", nil)
+		return ghostButton("close", 16, tr("Remove"), nil)
 	})
 	remove.OnClick(func() { elements.AfterLayout(func() { a.player.PlaylistRemove(i) }) })
 	return elements.Keyed("playlist-row", e.Filename+"#"+strconv.Itoa(i), func() *elements.Pressable {
@@ -163,7 +162,7 @@ func (p *sidePanel) chapterRow(i int) elements.Element {
 	current := i == st.Chapter
 	title := c.Title
 	if title == "" {
-		title = fmt.Sprintf("Chapter %d", i+1)
+		title = tr("Chapter {number}", "number", i+1)
 	}
 	return elements.Keyed("chapter-row", strconv.Itoa(i)+title, func() *elements.Pressable {
 		return elements.NewPressable(nil)

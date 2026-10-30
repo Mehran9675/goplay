@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mehran9675/giode/i18n"
 	"github.com/mehran9675/goplay/internal/mpv"
 )
 
@@ -55,14 +56,14 @@ func (t Track) Name() string {
 		case t.Kind == Audio && t.Channels > 0:
 			name = strings.ToUpper(t.Codec) + " " + channelName(t.Channels)
 		default:
-			name = "Track " + strconv.Itoa(t.ID)
+			name = i18n.Intl("Track {number}", "number", t.ID)
 		}
 	}
 	if t.Lang != "" {
 		name += " · " + LanguageName(t.Lang)
 	}
 	if t.Forced {
-		name += " (forced)"
+		name += " " + i18n.Intl("(forced)")
 	}
 	return name
 }
@@ -70,9 +71,9 @@ func (t Track) Name() string {
 func channelName(n int) string {
 	switch n {
 	case 1:
-		return "mono"
+		return i18n.Intl("mono")
 	case 2:
-		return "stereo"
+		return i18n.Intl("stereo")
 	case 6:
 		return "5.1"
 	case 8:

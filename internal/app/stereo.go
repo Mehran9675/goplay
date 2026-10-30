@@ -50,11 +50,11 @@ func (a *App) stereoFileLoaded() {
 		switch {
 		case d.Projection != player.ProjectionFlat:
 			s.projection, s.vrStereo = d.Projection, d.VRStereo
-			a.toast("360° video — drag to look around, scroll to zoom")
+			a.toast(tr("360° video — drag to look around, scroll to zoom"))
 		case d.Layout != player.Layout2D:
 			s.layout = d.Layout
 			s.view = player.StereoView(a.settings.Get(settings.KeyStereoView))
-			a.toast("3D video — change how it's shown in the 3D menu")
+			a.toast(tr("3D video — change how it's shown in the 3D menu"))
 		}
 	}
 	a.player.SetFilter("goplay-3d", "")
@@ -72,9 +72,9 @@ func (a *App) setStereoLayout(l player.StereoLayout) {
 	}
 	a.applyStereo()
 	if l == player.Layout2D {
-		a.osd("3D off")
+		a.osd(tr("3D off"))
 	} else {
-		a.osd("3D on")
+		a.osd(tr("3D on"))
 	}
 }
 
@@ -97,9 +97,9 @@ func (a *App) setProjection(p player.Projection, s player.VRStereo) {
 	}
 	a.applyStereo()
 	if p == player.ProjectionFlat {
-		a.osd("Flat video")
+		a.osd(tr("Flat video"))
 	} else {
-		a.osd("Drag to look around · scroll to zoom")
+		a.osd(tr("Drag to look around · scroll to zoom"))
 	}
 }
 
@@ -113,7 +113,7 @@ func (a *App) resetVRView() {
 func (a *App) applyStereo() {
 	s := &a.stereo
 	if err := a.player.SetFilter("goplay-3d", player.StereoFilter(s.layout, s.view)); err != nil {
-		a.toastError("3D: " + err.Error())
+		a.toastError(tr("3D: {error}", "error", err))
 	}
 	if s.projection == player.ProjectionFlat {
 		a.player.SetFilter("goplay-360", "")
@@ -122,7 +122,7 @@ func (a *App) applyStereo() {
 	w, h := a.vrOutputSize()
 	s.outW, s.outH = w, h
 	if err := a.player.SetFilter("goplay-360", player.VRFilter(s.projection, s.vrStereo, s.vr, w, h)); err != nil {
-		a.toastError("360°: " + err.Error())
+		a.toastError(tr("360°: {error}", "error", err))
 		return
 	}
 	s.live = true
@@ -170,7 +170,7 @@ func (a *App) vrZoom(steps float32) {
 	s.vr.FOV *= math.Pow(0.92, float64(steps))
 	s.vr = s.vr.Clamp()
 	a.sendVRView()
-	a.osd("Field of view " + strconv.Itoa(int(math.Round(s.vr.FOV))) + "°")
+	a.osd(tr("Field of view {degrees}°", "degrees", int(math.Round(s.vr.FOV))))
 }
 
 // sendVRView updates the 360° filter's angles, no more often than
