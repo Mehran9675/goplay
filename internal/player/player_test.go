@@ -139,3 +139,27 @@ func TestPlaylistAndTracks(t *testing.T) {
 	p.PlaylistNext()
 	p.waitFor(t, "second file", func() bool { return p.State.PlaylistPos == 1 })
 }
+
+// A track picked in one file mustn't carry over: the next file's audio
+// plays even when the last one's was turned off.
+func TestTrackChoiceIsPerFile(t *testing.T) {
+	p, dir := newTestPlayer(t)
+	files := []string{filepath.Join(dir, "chapters.mkv"), filepath.Join(dir, "h264_1080p.mp4")}
+	if err := p.Open(files, false); err != nil {
+		t.Fatal(err)
+	}
+	p.waitFor(t, "audio", func() bool {
+		_, ok := p.State.SelectedTrack(Audio)
+		return ok && len(p.State.Playlist) == 2
+	})
+	p.SelectTrack(Audio, 0)
+	p.waitFor(t, "audio off", func() bool {
+		_, ok := p.State.SelectedTrack(Audio)
+		return !ok
+	})
+	p.PlaylistNext()
+	p.waitFor(t, "audio in the second file", func() bool {
+		_, ok := p.State.SelectedTrack(Audio)
+		return p.State.PlaylistPos == 1 && ok
+	})
+}

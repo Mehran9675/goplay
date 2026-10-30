@@ -368,12 +368,20 @@ func (p *Player) SelectTrack(k TrackKind, id int) {
 	if k == Audio {
 		p.audioTrack = id
 	}
-	p.h.SetString(trackProperty(k), idOrNo(id))
+	p.h.SetString(fileLocal(trackProperty(k)), idOrNo(id))
 }
 
 // SelectSecondarySubtitle shows track id as a second subtitle line; 0
 // turns it off.
-func (p *Player) SelectSecondarySubtitle(id int) { p.h.SetString("secondary-sid", idOrNo(id)) }
+func (p *Player) SelectSecondarySubtitle(id int) {
+	p.h.SetString(fileLocal("secondary-sid"), idOrNo(id))
+}
+
+// fileLocal names option for the playing file only. A track picked by
+// setting aid, sid or vid stays picked for the files after it, where the
+// same number is another track or none: audio turned off once would stay
+// off.
+func fileLocal(option string) string { return "file-local-options/" + option }
 
 // AddSubtitle loads an external subtitle file and shows it.
 func (p *Player) AddSubtitle(path string) error {

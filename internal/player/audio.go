@@ -84,8 +84,8 @@ func (p *Player) restartAudio() {
 	}
 	// mpv deselects the track when its output fails; it may also still
 	// count it selected, so it's turned off first.
-	p.h.SetString("aid", "no")
-	p.h.SetString("aid", strconv.Itoa(p.audioTrack))
+	p.h.SetString(fileLocal("aid"), "no")
+	p.h.SetString(fileLocal("aid"), strconv.Itoa(p.audioTrack))
 }
 
 // noteAudioTrack remembers the playing audio track from the track list,

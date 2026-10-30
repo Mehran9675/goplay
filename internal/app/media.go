@@ -125,7 +125,11 @@ func (a *App) openItems(items []string, appendToPlaylist bool) {
 	}
 	if a.casting() {
 		a.Post(a.castCurrent)
+		return
 	}
+	// mpv keeps pause across files, and a finished file is left paused on
+	// its last frame: what's opened plays.
+	a.player.SetPause(false)
 }
 
 // dropped handles files dropped on the window: subtitle files join the
